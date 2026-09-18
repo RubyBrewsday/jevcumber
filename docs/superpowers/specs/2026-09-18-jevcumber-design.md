@@ -97,9 +97,13 @@ Questions, all asked together; code consumes only those relevant to `kind`:
 | `element` | Choice | each element id, plus `none` |
 | `value` | Choice | each value id, plus `none` (omitted when there are no values) |
 | `assertion` | Choice | `text_visible`, `text_not_visible`, `element_visible`, `element_has_value`, `url_contains`, `semantic` |
+| `key` | Choice | `Enter`, `Tab`, `Escape`, `Space`, `Backspace`, `Delete`, `ArrowUp`, `ArrowDown`, `ArrowLeft`, `ArrowRight`, `none` |
+
+The `element` and `value` questions are omitted when the page has no
+interactive elements or the step has no literals; both then count as `none`.
 
 Relevance: `navigate` uses value; `click`/`check`/`uncheck` use element;
-`fill`/`select` use element + value; `press` uses value (key name) and optional
+`fill`/`select` use element + value; `press` uses key and, when one is chosen,
 element; `assert` uses assertion plus whichever of element/value that assertion
 form needs.
 
@@ -112,7 +116,7 @@ type ResolvedStep =
   | { kind: 'navigate'; value: string }
   | { kind: 'click'|'check'|'uncheck'; locator: LocatorSpec }
   | { kind: 'fill'|'select'; locator: LocatorSpec; value: string }
-  | { kind: 'press'; value: string; locator?: LocatorSpec }
+  | { kind: 'press'; key: string; locator?: LocatorSpec }
   | { kind: 'assert'; assertion: Assertion }
 type Assertion =
   | { form: 'text_visible'|'text_not_visible'|'url_contains'; value: string }
@@ -150,8 +154,12 @@ Entries not touched during a full run of that feature are pruned. Output is
 key-sorted for stable diffs.
 
 ### `runner.ts`
-Per step: lockfile hit → validate (every locator in the entry resolves to
-exactly one element) → replay. On miss or failed validation → resolve with Jev,
+Per step: lockfile hit → validate → replay. Validation applies to action steps
+only: each locator must attach within 2 s and match exactly one element.
+Cached assertions are never pre-validated — Playwright's auto-waiting `expect`
+is the judge, so a stale assertion fails rather than heals (`--update` fixes
+it). Skipped steps still mark their lockfile entries as in use so a failing run
+does not prune them. On miss or failed validation → resolve with Jev,
 write the entry, and mark the step **healed** if an entry existed. Modes:
 
 - default: resolve on miss, heal on stale
@@ -193,7 +201,7 @@ actually needs Jev; its absence is reported on that step.
 
 ## Dependencies
 
-`playwright`, `@cucumber/gherkin`, `@cucumber/messages`,
+`@playwright/test` (for `chromium` and standalone `expect`), `@cucumber/gherkin`, `@cucumber/messages`,
 `@cucumber/tag-expressions`, `@typesafe-ai/sdk`, `commander`; dev: `typescript`,
 `vitest`, `tsx`.
 
