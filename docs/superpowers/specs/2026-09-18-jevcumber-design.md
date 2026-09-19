@@ -201,13 +201,17 @@ skipped. Scenarios run sequentially.
 
 ### `cli.ts`
 ```
-jevcumber <paths…> --base-url <url>
+jevcumber <paths…> [--base-url <url>]
           [--frozen | --update] [--headed] [--min-confidence <n>] [--tags <expr>]
 ```
 Console reporter: one line per step with status, a failure block with the
 error or ambiguity detail, and a summary. Exit 1 if any step is failed,
 ambiguous, or undefined. `TYPESAFE_API_KEY` is required only when a step
 actually needs Jev; its absence is reported on that step.
+
+`--base-url` is optional: a navigate literal may be a full URL, a bare domain (`https://` assumed) or a
+localhost/IP host (`http://` assumed). Only a relative path needs `--base-url`, and fails with a message
+saying so when it is absent.
 
 ## Error handling
 

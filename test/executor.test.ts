@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { chromium, type Browser, type Page } from '@playwright/test';
-import { actionLocators, execute } from '../src/executor.js';
+import { actionLocators, execute, navigationUrl } from '../src/executor.js';
 import type { LocatorSpec } from '../src/types.js';
 
 const HTML = `
@@ -95,5 +95,26 @@ describe('actionLocators', () => {
     expect(actionLocators({ kind: 'press', key: 'Enter' })).toEqual([]);
     expect(actionLocators({ kind: 'navigate', value: '/' })).toEqual([]);
     expect(actionLocators({ kind: 'assert', assertion: { form: 'element_visible', locator: role('button', 'Go') } })).toEqual([]);
+  });
+});
+
+describe('navigationUrl', () => {
+  it('passes absolute URLs through, with or without a base URL', () => {
+    expect(navigationUrl('https://example.com/a?b=1')).toBe('https://example.com/a?b=1');
+    expect(navigationUrl('https://example.com/a', 'http://localhost:3000')).toBe('https://example.com/a');
+  });
+
+  it('assumes https for a bare domain and http for localhost', () => {
+    expect(navigationUrl('example.com/pricing')).toBe('https://example.com/pricing');
+    expect(navigationUrl('localhost:3000/login')).toBe('http://localhost:3000/login');
+    expect(navigationUrl('127.0.0.1:8080')).toBe('http://127.0.0.1:8080/');
+  });
+
+  it('resolves paths against the base URL', () => {
+    expect(navigationUrl('/login', 'http://localhost:3000')).toBe('http://localhost:3000/login');
+  });
+
+  it('explains what to do when a path has no base URL to resolve against', () => {
+    expect(() => navigationUrl('/login')).toThrow(/--base-url/);
   });
 });

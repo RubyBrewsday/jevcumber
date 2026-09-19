@@ -26,7 +26,7 @@ export async function main(argv: string[]): Promise<number> {
     .name('jevcumber')
     .description('Run Cucumber feature files against a web UI with no step definitions.')
     .argument('<paths...>', 'feature files or directories')
-    .requiredOption('--base-url <url>', 'URL that relative navigation resolves against', parseBaseUrl)
+    .option('--base-url <url>', 'URL that relative paths in steps resolve against (not needed when steps use full URLs)', parseBaseUrl)
     .option('--frozen', 'replay the lockfile only; never call Jev (for CI)', false)
     .option('--update', 'ignore the lockfile and re-resolve every step', false)
     .option('--headed', 'show the browser', false)

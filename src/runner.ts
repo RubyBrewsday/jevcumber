@@ -92,7 +92,7 @@ export interface Reporter {
 
 export interface RunOptions {
   paths: string[];
-  baseUrl: string;
+  baseUrl?: string;
   mode: Mode;
   headed: boolean;
   minConfidence: number;

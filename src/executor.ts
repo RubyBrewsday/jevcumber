@@ -10,7 +10,8 @@ const ASSERT_TIMEOUT = 5000;
 const SELECT_LABEL_TIMEOUT = 1000;
 
 export interface ExecuteContext {
-  baseUrl: string;
+  /** What relative navigation resolves against. Optional: steps may name full URLs instead. */
+  baseUrl?: string;
   stepText: string;
   /** Returns P(page satisfies stepText). Absent in --frozen mode. */
   semantic?: (stepText: string) => Promise<number>;
@@ -20,6 +21,21 @@ export interface ExecuteContext {
 export function actionLocators(resolved: ResolvedStep): LocatorSpec[] {
   if (resolved.kind === 'navigate' || resolved.kind === 'assert') return [];
   return resolved.locator ? [resolved.locator] : [];
+}
+
+const LOCAL_HOST = /^(?:localhost|(?:\d{1,3}\.){3}\d{1,3})(?::\d+)?(?:\/|$)/i;
+const DOMAIN = /^(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?(?:\/|$)/i;
+const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+
+/** Where a navigate step's literal points: a full URL, a bare host, or a path under the base URL. */
+export function navigationUrl(value: string, baseUrl?: string): string {
+  if (LOCAL_HOST.test(value)) return new URL(`http://${value}`).href;
+  if (DOMAIN.test(value)) return new URL(`https://${value}`).href;
+  if (HAS_SCHEME.test(value)) return new URL(value).href;
+  if (!baseUrl) {
+    throw new Error(`"${value}" is a relative path, but no --base-url was given. Use a full URL in the step, or pass --base-url.`);
+  }
+  return new URL(value, baseUrl).href;
 }
 
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -74,7 +90,7 @@ async function check(page: Page, assertion: Assertion, ctx: ExecuteContext): Pro
 export async function execute(page: Page, resolved: ResolvedStep, ctx: ExecuteContext): Promise<void> {
   switch (resolved.kind) {
     case 'navigate':
-      await page.goto(new URL(resolved.value, ctx.baseUrl).href);
+      await page.goto(navigationUrl(resolved.value, ctx.baseUrl));
       break;
     case 'click':
       await toLocator(page, resolved.locator).click();

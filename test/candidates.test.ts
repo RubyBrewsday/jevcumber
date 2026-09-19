@@ -29,4 +29,15 @@ describe('extractValues', () => {
     const values = extractValues(step('I add "Buy milk"', { table: [['Buy milk'], ['Walk dog']], docString: 'note' }));
     expect(values).toEqual(['Buy milk', 'Walk dog', 'note']);
   });
+
+  it('extracts bare domains and localhost addresses, but not the domain of an email address', () => {
+    expect(extractValues(step('I am on example.com/pricing'))).toEqual(['example.com/pricing']);
+    expect(extractValues(step('I open localhost:3000/login and wait'))).toEqual(['localhost:3000/login']);
+    expect(extractValues(step('I sign in as alice@example.com'))).toEqual([]);
+    expect(extractValues(step('the price is 3.50 today'))).toEqual(['3.50']);
+  });
+
+  it('drops sentence punctuation from the end of a bare URL', () => {
+    expect(extractValues(step('I am on https://example.com/a.'))).toEqual(['https://example.com/a']);
+  });
 });

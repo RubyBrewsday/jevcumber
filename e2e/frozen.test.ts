@@ -57,7 +57,22 @@ describe('jevcumber --frozen against the fixture app', () => {
     const { dir } = workspace();
     expect(await main([dir, '--base-url', server.url, '--frozen', '--tags', '@nonexistent'])).toBe(1); // no scenarios
     expect(await main([dir, '--base-url', server.url, '--frozen', '--update'])).toBe(1);
-    expect(await main([dir])).toBe(1); // missing --base-url
+    expect(await main([dir, '--frozen'])).toBe(1); // relative "/login" with no --base-url to resolve against
+  });
+
+  it('needs no --base-url when steps name full URLs', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'jevcumber-e2e-'));
+    const feature = join(dir, 'absolute.feature');
+    const steps = [`Given I am on ${server.url}/login`, 'Then I should see "Sign in"'];
+    writeFileSync(feature, `Feature: Absolute\n  Scenario: full URL\n    ${steps[0]}\n    ${steps[1]}\n`);
+    const [scenario] = parseFeature(readFileSync(feature, 'utf8'), feature);
+    const resolved: ResolvedStep[] = [{ kind: 'navigate', value: `${server.url}/login` }, sees('Sign in')];
+    const entries = Object.fromEntries(
+      scenario.steps.map((step, index) => [stepKey(scenario, index), { text: step.text, resolved: resolved[index] }]),
+    );
+    writeFileSync(lockPathFor(feature), JSON.stringify({ version: 1, steps: entries }, null, 2));
+
+    expect(await main([dir, '--frozen'])).toBe(0);
   });
 
   it('rejects a non-absolute --base-url at parse time, before touching the browser', async () => {

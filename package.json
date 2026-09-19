@@ -2,6 +2,22 @@
   "name": "jevcumber",
   "version": "0.1.0",
   "description": "Run Cucumber feature files against a web UI with no step definitions, powered by Jev.",
+  "keywords": [
+    "cucumber",
+    "gherkin",
+    "bdd",
+    "playwright",
+    "testing",
+    "ai",
+    "typesafe",
+    "jev"
+  ],
+  "license": "MIT",
+  "author": "Mike Poage",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RubyBrewsday/jevcumber.git"
+  },
   "type": "module",
   "bin": {
     "jevcumber": "dist/cli.js"
