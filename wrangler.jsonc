@@ -1,0 +1,16 @@
+// Deploys the landing page in site/ to Cloudflare Workers (static assets). `npx wrangler deploy`.
+{
+  "name": "jevcumber-site",
+  "main": "site-worker/index.js",
+  "compatibility_date": "2026-09-01",
+  "assets": { "directory": "./site", "binding": "ASSETS", "run_worker_first": true },
+  "workers_dev": true,
+  // Custom domains: Cloudflare creates the DNS records and certificates. Everything except
+  // jevcumber.dev is redirected to it by site-worker/index.js.
+  "routes": [
+    { "pattern": "jevcumber.dev", "custom_domain": true },
+    { "pattern": "www.jevcumber.dev", "custom_domain": true },
+    { "pattern": "jevcumber.com", "custom_domain": true },
+    { "pattern": "www.jevcumber.com", "custom_domain": true }
+  ]
+}

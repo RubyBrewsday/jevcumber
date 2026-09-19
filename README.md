@@ -1,5 +1,7 @@
 # 🥒 jevcumber
 
+**[jevcumber.dev](https://jevcumber.dev)** — site and demo video
+
 [![CI](https://github.com/RubyBrewsday/jevcumber/actions/workflows/ci.yml/badge.svg)](https://github.com/RubyBrewsday/jevcumber/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -203,6 +205,13 @@ in the page. Use the built CLI.)
 The layout is one small module per job under `src/`: `gherkin` → `snapshot` + `candidates` →
 `resolver` (the only module that talks to Jev) → `lockfile` → `executor` → `reporter`, orchestrated
 by `runner`. The design doc is in [`docs/superpowers/specs`](docs/superpowers/specs).
+
+### The website
+
+[jevcumber.dev](https://jevcumber.dev) is the single static page in `site/`, served by a Cloudflare Worker
+(`wrangler.jsonc`, `site-worker/index.js`) that also redirects jevcumber.com and the `www.` hosts to
+jevcumber.dev and answers byte-range requests for the demo video. Deploy with `npm run deploy:site`
+(needs `npx wrangler login` first).
 
 ### Tuning the questions Jev is asked
 
