@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "steps": {
+    "63bd7e885f16cf0ca36c2cc1382c2703b45ccbf6810738203f5807967cf29abd": {
+      "text": "I search for \"bagel\"",
+      "resolved": {
+        "kind": "fill",
+        "locator": {
+          "by": "role",
+          "role": "searchbox",
+          "name": "Search Wikipedia"
+        },
+        "value": "bagel",
+        "submit": true
+      }
+    },
+    "8558dfd43b045eb0d8d02c3b634da9347fe29cd9febf4bdff87a7c47e780743c": {
+      "text": "the URL should contain \"/wiki/Bagel\"",
+      "resolved": {
+        "kind": "assert",
+        "assertion": {
+          "form": "url_contains",
+          "value": "/wiki/Bagel"
+        }
+      }
+    },
+    "cf5bd18e8f33497b2a681fcbb4f7a35d7010ee721b5104c1eaf9e3074b6d512f": {
+      "text": "I should see \"From Wikipedia, the free encyclopedia\"",
+      "resolved": {
+        "kind": "assert",
+        "assertion": {
+          "form": "text_visible",
+          "value": "From Wikipedia, the free encyclopedia"
+        }
+      }
+    },
+    "feb0e5c1e21e511f322d6cdf6cca873d84edeaecb82c4023ba9f72bac8925695": {
+      "text": "I am on https://en.wikipedia.org",
+      "resolved": {
+        "kind": "navigate",
+        "value": "https://en.wikipedia.org"
+      }
+    }
+  }
+}

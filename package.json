@@ -30,7 +30,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "prepack": "npm run build",
+    "prepare": "npm run build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "jevcumber": "npm run build && node dist/cli.js"
@@ -48,5 +48,9 @@
     "tsx": "^4.23.13",
     "typescript": "^7.0.2",
     "vitest": "^5.0.1"
+  },
+  "homepage": "https://github.com/RubyBrewsday/jevcumber#readme",
+  "bugs": {
+    "url": "https://github.com/RubyBrewsday/jevcumber/issues"
   }
 }
