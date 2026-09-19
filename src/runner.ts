@@ -36,7 +36,18 @@ export async function runScenario(scenario: Scenario, deps: ScenarioDeps): Promi
     let resolved: ResolvedStep;
     let healed = false;
 
-    if (cached && (await deps.isValid(cached))) {
+    // isValid can throw (e.g. a destroyed execution context): treat that as "not valid"
+    // rather than letting it escape and abort the run.
+    let cachedIsValid = false;
+    if (cached) {
+      try {
+        cachedIsValid = await deps.isValid(cached);
+      } catch {
+        cachedIsValid = false;
+      }
+    }
+
+    if (cached && cachedIsValid) {
       resolved = cached;
     } else if (deps.mode === 'frozen') {
       const detail = cached
@@ -112,48 +123,54 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
   };
 
   const results: ScenarioResult[] = [];
+  let completed = false;
   const browser = await chromium.launch({ headless: !options.headed });
   try {
-    for (const scenario of scenarios) {
-      options.reporter.scenarioStart(scenario);
-      const context = await browser.newContext();
-      const page = await context.newPage();
-      try {
-        const steps = await runScenario(scenario, {
-          mode: options.mode,
-          lock: lockFor(scenario.uri),
-          resolve: async (step, previousSteps) =>
-            resolve({
-              step,
-              scenarioName: scenario.name,
-              previousSteps,
-              snapshot: await snapshot(page),
-              values: extractValues(step),
-              client: getClient(),
-              minConfidence: options.minConfidence,
-            }),
-          isValid: (resolved) => isValid(page, resolved),
-          execute: (resolved, step) =>
-            execute(page, resolved, {
-              baseUrl: options.baseUrl,
-              stepText: step.text,
-              semantic: frozen ? undefined : async (text) => semanticCheck(getClient(), text, await snapshot(page)),
-            }),
-          onStep: (result) => options.reporter.step(result),
-        });
-        results.push({ scenario, steps });
-      } finally {
-        await context.close();
+    try {
+      for (const scenario of scenarios) {
+        options.reporter.scenarioStart(scenario);
+        const context = await browser.newContext();
+        try {
+          const page = await context.newPage();
+          const steps = await runScenario(scenario, {
+            mode: options.mode,
+            lock: lockFor(scenario.uri),
+            resolve: async (step, previousSteps) =>
+              resolve({
+                step,
+                scenarioName: scenario.name,
+                previousSteps,
+                snapshot: await snapshot(page),
+                values: extractValues(step),
+                client: getClient(),
+                minConfidence: options.minConfidence,
+              }),
+            isValid: (resolved) => isValid(page, resolved),
+            execute: (resolved, step) =>
+              execute(page, resolved, {
+                baseUrl: options.baseUrl,
+                stepText: step.text,
+                semantic: frozen ? undefined : async (text) => semanticCheck(getClient(), text, await snapshot(page)),
+              }),
+            onStep: (result) => options.reporter.step(result),
+          });
+          results.push({ scenario, steps });
+        } finally {
+          await context.close();
+        }
       }
+      completed = true;
+    } finally {
+      await browser.close();
     }
   } finally {
-    await browser.close();
+    // Persist whatever the run resolved even if it aborted, so completed work isn't lost.
+    // Pruning is only safe after a complete, unfiltered run; an aborted run saves as-is.
+    if (!frozen) {
+      for (const lock of locks.values()) lock.save(completed && options.tags === undefined);
+    }
   }
 
-  if (!frozen) {
-    // Prune only when every scenario of the feature ran, i.e. no tag filter.
-    for (const lock of locks.values()) lock.save(options.tags === undefined);
-  }
   options.reporter.end(results);
   return results;
 }

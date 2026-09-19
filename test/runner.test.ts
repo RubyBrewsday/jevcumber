@@ -77,6 +77,21 @@ describe('runScenario', () => {
     expect(results[0].status).toBe('passed');
   });
 
+  it('treats a throwing isValid as stale rather than letting it escape', async () => {
+    const healing = harness({ isValid: async () => { throw new Error('Execution context was destroyed'); } }, { 0: nav('/stale') });
+    const healingResults = await runScenario(scenario, healing.deps);
+    expect(healingResults[0].status).toBe('healed');
+
+    const frozen = harness(
+      { mode: 'frozen', isValid: async () => { throw new Error('Execution context was destroyed'); } },
+      { 0: nav('/stale') },
+    );
+    const frozenResults = await runScenario(scenario, frozen.deps);
+    expect(frozen.calls.resolve).toEqual([]);
+    expect(frozenResults[0]).toMatchObject({ status: 'failed' });
+    expect(frozenResults[0].detail).toMatch(/stale/i);
+  });
+
   it('never resolves in frozen mode: a miss or stale entry fails the step', async () => {
     const miss = harness({ mode: 'frozen' });
     const missResults = await runScenario(scenario, miss.deps);
