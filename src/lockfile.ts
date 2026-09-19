@@ -11,7 +11,14 @@ interface LockEntry {
 
 export function stepKey(scenario: Scenario, index: number): string {
   const step = scenario.steps[index];
-  const identity = JSON.stringify([scenario.name, index, step.text, step.table ?? null, step.docString ?? null]);
+  const identity = JSON.stringify([
+    scenario.name,
+    scenario.occurrence,
+    index,
+    step.text,
+    step.table ?? null,
+    step.docString ?? null,
+  ]);
   return createHash('sha256').update(identity).digest('hex');
 }
 

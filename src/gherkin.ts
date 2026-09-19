@@ -18,6 +18,7 @@ export function parseFeature(source: string, uri: string): Scenario[] {
 
   let feature = '';
   const scenarios: Scenario[] = [];
+  const occurrences = new Map<string, number>(); // per-file count of scenarios seen with each name so far
   for (const envelope of envelopes) {
     if (envelope.parseError) {
       throw new Error(`${uri}: ${envelope.parseError.message}`);
@@ -27,10 +28,13 @@ export function parseFeature(source: string, uri: string): Scenario[] {
     }
     if (envelope.pickle) {
       const pickle = envelope.pickle;
+      const occurrence = occurrences.get(pickle.name) ?? 0;
+      occurrences.set(pickle.name, occurrence + 1);
       scenarios.push({
         uri,
         feature,
         name: pickle.name,
+        occurrence,
         tags: pickle.tags.map((tag) => tag.name),
         steps: pickle.steps.map((pickleStep): Step => {
           const step: Step = { keyword: KEYWORDS[pickleStep.type ?? ''] ?? 'When', text: pickleStep.text };

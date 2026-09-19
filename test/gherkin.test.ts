@@ -28,13 +28,21 @@ const SOURCE = `Feature: Login
       """
       hello
       """
+
+  Scenario Outline: repeated name
+    When I do <thing>
+
+    Examples:
+      | thing |
+      | a     |
+      | b     |
 `;
 
 describe('parseFeature', () => {
   const scenarios = parseFeature(SOURCE, 'login.feature');
 
   it('expands outlines and prepends the background', () => {
-    expect(scenarios.map((s) => s.name)).toEqual([
+    expect(scenarios.slice(0, 3).map((s) => s.name)).toEqual([
       'log in as a@b.c',
       'log in as d@e.f',
       'table and docstring',
@@ -57,6 +65,17 @@ describe('parseFeature', () => {
     expect(scenarios[2].tags).toEqual([]);
   });
 
+  it('numbers occurrence by name, so same-named Scenario Outline rows are distinguishable', () => {
+    expect(scenarios.map((s) => s.name)).toEqual([
+      'log in as a@b.c',
+      'log in as d@e.f',
+      'table and docstring',
+      'repeated name',
+      'repeated name',
+    ]);
+    expect(scenarios.map((s) => s.occurrence)).toEqual([0, 0, 0, 0, 1]);
+  });
+
   it('carries data tables and docstrings', () => {
     expect(scenarios[2].steps[1].table).toEqual([['Buy milk'], ['Walk dog']]);
     expect(scenarios[2].steps[2].docString).toBe('hello');
@@ -76,7 +95,11 @@ describe('loadFeatures', () => {
 
     expect(findFeatureFiles([dir])).toEqual([join(dir, 'nested', 'login.feature')]);
     expect(loadFeatures([dir], '@smoke').map((s) => s.name)).toEqual(['log in as a@b.c', 'log in as d@e.f']);
-    expect(loadFeatures([dir], 'not @smoke').map((s) => s.name)).toEqual(['table and docstring']);
-    expect(loadFeatures([dir])).toHaveLength(3);
+    expect(loadFeatures([dir], 'not @smoke').map((s) => s.name)).toEqual([
+      'table and docstring',
+      'repeated name',
+      'repeated name',
+    ]);
+    expect(loadFeatures([dir])).toHaveLength(5);
   });
 });

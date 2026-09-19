@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { consoleReporter, exitCode } from '../src/reporter.js';
 import type { Scenario, ScenarioResult, StepStatus } from '../src/types.js';
 
-const scenario: Scenario = { uri: 'a.feature', feature: 'Login', name: 'logs in', tags: [], steps: [] };
+const scenario: Scenario = { uri: 'a.feature', feature: 'Login', name: 'logs in', occurrence: 0, tags: [], steps: [] };
 const result = (...statuses: StepStatus[]): ScenarioResult => ({
   scenario,
   steps: statuses.map((status, i) => ({ step: { keyword: 'When', text: `step ${i}` }, status, detail: status === 'failed' ? 'boom\nline two' : undefined })),

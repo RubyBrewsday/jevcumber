@@ -9,6 +9,7 @@ const scenario: Scenario = {
   uri: 'a.feature',
   feature: 'A',
   name: 'one',
+  occurrence: 0,
   tags: [],
   steps: [
     { keyword: 'Given', text: 'I am on "/login"' },
@@ -25,6 +26,10 @@ describe('stepKey', () => {
     expect(stepKey({ ...scenario, name: 'two' }, 0)).not.toBe(stepKey(scenario, 0));
     const changedTable = { ...scenario, steps: [scenario.steps[0], { ...scenario.steps[1], table: [['y']] }] };
     expect(stepKey(changedTable, 1)).not.toBe(stepKey(scenario, 1));
+  });
+
+  it('distinguishes scenarios with the same name, index, and text by occurrence', () => {
+    expect(stepKey({ ...scenario, occurrence: 1 }, 0)).not.toBe(stepKey(scenario, 0));
   });
 });
 

@@ -11,6 +11,9 @@ export interface Scenario {
   uri: string;
   feature: string;
   name: string;
+  /** Zero-based index of this scenario among scenarios with the same name in the same feature file
+   *  (0 for a uniquely-named scenario). Distinguishes Scenario Outline rows in the lockfile key. */
+  occurrence: number;
   tags: string[];
   steps: Step[];
 }
