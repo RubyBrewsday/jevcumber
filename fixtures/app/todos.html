@@ -1,0 +1,21 @@
+<!doctype html>
+<title>Todos</title>
+<h1 id="welcome"></h1>
+<form id="add">
+  <label for="new-todo">New todo</label> <input id="new-todo">
+  <button type="submit">Add</button>
+</form>
+<ul id="list"></ul>
+<script>
+  const user = new URLSearchParams(location.search).get('user') ?? 'stranger';
+  document.getElementById('welcome').textContent = 'Welcome, ' + user;
+  document.getElementById('add').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const input = document.getElementById('new-todo');
+    if (!input.value) return;
+    const item = document.createElement('li');
+    item.textContent = input.value;
+    document.getElementById('list').append(item);
+    input.value = '';
+  });
+</script>

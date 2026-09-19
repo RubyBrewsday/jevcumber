@@ -1,0 +1,20 @@
+<!doctype html>
+<title>Sign in</title>
+<h1>Sign in</h1>
+<form id="login">
+  <label for="email">Email</label> <input id="email" type="email">
+  <label for="password">Password</label> <input id="password" type="password">
+  <button type="submit">Log in</button>
+</form>
+<p id="error" role="alert"></p>
+<script>
+  document.getElementById('login').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const email = document.getElementById('email').value;
+    if (document.getElementById('password').value === 'secret') {
+      location.href = '/todos?user=' + encodeURIComponent(email.split('@')[0]);
+    } else {
+      document.getElementById('error').textContent = 'Invalid email or password';
+    }
+  });
+</script>
