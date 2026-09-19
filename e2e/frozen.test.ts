@@ -75,6 +75,11 @@ describe('jevcumber --frozen against the fixture app', () => {
     expect(await main([dir, '--frozen'])).toBe(0);
   });
 
+  it('install-browser drives the bundled Playwright installer', async () => {
+    // --dry-run makes Playwright print what it would install without downloading anything.
+    expect(await main(['install-browser', '--dry-run'])).toBe(0);
+  });
+
   it('rejects a non-absolute --base-url at parse time, before touching the browser', async () => {
     const { dir } = workspace();
     const errors = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);

@@ -1,0 +1,27 @@
+name: Release
+
+# Pushing a tag like v0.2.0 builds the package and attaches it to a GitHub Release as jevcumber.tgz,
+# which is what the README's install command downloads.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - run: npm pack && mv jevcumber-*.tgz jevcumber.tgz
+      - run: gh release create "$GITHUB_REF_NAME" jevcumber.tgz --generate-notes --verify-tag
+        env:
+          GH_TOKEN: ${{ github.token }}

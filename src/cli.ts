@@ -1,5 +1,7 @@
 #!/usr/bin/env node
+import { spawnSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { Command, InvalidArgumentError } from 'commander';
 import { consoleReporter, exitCode } from './reporter.js';
@@ -21,7 +23,17 @@ function parseBaseUrl(raw: string): string {
   return raw;
 }
 
+// Installs the browser build that matches the Playwright bundled with jevcumber; a stray
+// `npx playwright install` can fetch a different Playwright and with it the wrong build.
+function installBrowser(extraArgs: string[]): number {
+  const playwrightCli = createRequire(import.meta.url).resolve('@playwright/test/cli');
+  const result = spawnSync(process.execPath, [playwrightCli, 'install', 'chromium', ...extraArgs], { stdio: 'inherit' });
+  return result.status ?? 1;
+}
+
 export async function main(argv: string[]): Promise<number> {
+  if (argv[0] === 'install-browser') return installBrowser(argv.slice(1));
+
   const program = new Command()
     .name('jevcumber')
     .description('Run Cucumber feature files against a web UI with no step definitions.')
@@ -32,6 +44,7 @@ export async function main(argv: string[]): Promise<number> {
     .option('--headed', 'show the browser', false)
     .option('--min-confidence <n>', 'refuse to act below this Jev confidence', parseConfidence, 0.6)
     .option('--tags <expr>', 'cucumber tag expression, e.g. "@smoke and not @wip"')
+    .addHelpText('after', '\nFirst time? Run `jevcumber install-browser` to download the Chromium build jevcumber drives.')
     .exitOverride();
 
   try {
@@ -64,7 +77,11 @@ export async function main(argv: string[]): Promise<number> {
     }
     return exitCode(results);
   } catch (error) {
-    console.error(`error: ${error instanceof Error ? error.message : String(error)}`);
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`error: ${message}`);
+    if (/Executable doesn't exist|playwright install/i.test(message)) {
+      console.error('\nThe browser is not installed yet. Run: jevcumber install-browser');
+    }
     return 1;
   }
 }

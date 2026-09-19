@@ -70,8 +70,8 @@ The first run records what each step resolved to in `<name>.feature.lock.json`, 
 Requires Node.js 20+.
 
 ```bash
-npm install -g github:RubyBrewsday/jevcumber
-npx playwright install chromium
+npm install -g https://github.com/RubyBrewsday/jevcumber/releases/latest/download/jevcumber.tgz
+jevcumber install-browser      # downloads the Chromium build jevcumber drives
 ```
 
 This repo ships an example with its lockfile already recorded, so you can watch a replay without
@@ -177,8 +177,8 @@ anywhere.
 ```yaml
 - uses: actions/setup-node@v4
   with: { node-version: 20 }
-- run: npm install -g github:RubyBrewsday/jevcumber
-- run: npx playwright install --with-deps chromium
+- run: npm install -g https://github.com/RubyBrewsday/jevcumber/releases/latest/download/jevcumber.tgz
+- run: jevcumber install-browser --with-deps
 - run: jevcumber features/ --frozen --base-url http://localhost:3000
 ```
 
