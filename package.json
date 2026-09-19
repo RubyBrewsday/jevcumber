@@ -1,0 +1,35 @@
+{
+  "name": "jevcumber",
+  "version": "0.1.0",
+  "description": "Run Cucumber feature files against a web UI with no step definitions, powered by Jev.",
+  "type": "module",
+  "bin": {
+    "jevcumber": "dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "jevcumber": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "@cucumber/gherkin": "^42.0.1",
+    "@cucumber/messages": "^34.2.1",
+    "@cucumber/tag-expressions": "^11.0.1",
+    "@playwright/test": "^1.63.0",
+    "@typesafe-ai/sdk": "^0.6.0",
+    "commander": "^15.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.1",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.1"
+  }
+}
