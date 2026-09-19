@@ -102,4 +102,49 @@ describe('snapshot', () => {
     });
     await expect(snapshot(broken)).rejects.toThrow('boom');
   });
+
+  describe('on a very large page', () => {
+    let big: Page;
+    beforeAll(async () => {
+      big = await browser.newPage();
+      const links = Array.from({ length: 4000 }, (_, i) => `<a href="/p${i}">Article number ${i}</a>`).join(' ');
+      await big.setContent(`<title>Big</title>${links}<form><input aria-label="Search the archive" type="search"><button>Go</button></form>`);
+    });
+    afterAll(() => big.close());
+
+    it('stays fast by verifying only the elements most relevant to the step', async () => {
+      const started = Date.now();
+      const snap = await snapshot(big, { relevantTo: 'When I search for "cats"' });
+      expect(Date.now() - started).toBeLessThan(8000);
+      expect(snap.elements.length).toBeLessThanOrEqual(80);
+      expect(snap.elements.map((e) => e.name)).toContain('Search the archive');
+    });
+
+    it('keeps form controls ahead of the sea of links even when nothing in the step matches', async () => {
+      const names = (await snapshot(big, { relevantTo: 'When I do the thing' })).elements.map((e) => e.name);
+      expect(names).toContain('Search the archive');
+      expect(names).toContain('Go');
+    });
+
+    it('skips element collection entirely when only the page text is wanted', async () => {
+      const snap = await snapshot(big, { elements: false });
+      expect(snap.elements).toEqual([]);
+      expect(snap.title).toBe('Big');
+      expect(snap.text).toContain('Article number 1');
+    });
+  });
+
+  it('reads page text from the main content when the page marks one, not from the site chrome', async () => {
+    const framed = await browser.newPage();
+    await framed.setContent(`<title>T</title><nav>Main menu Donate Log in ${'Sidebar link '.repeat(900)}</nav>
+      <main><h1>Michelle Obama</h1><p>An American attorney and author.</p></main><footer>Privacy policy</footer>`);
+    const snap = await snapshot(framed, { elements: false });
+    expect(snap.text.startsWith('Michelle Obama')).toBe(true);
+    expect(snap.text).not.toContain('Sidebar link');
+    await framed.close();
+  });
+
+  it('falls back to the whole body when there is no main content landmark', async () => {
+    expect((await snapshot(page, { elements: false })).text).toContain('Sign in');
+  });
 });

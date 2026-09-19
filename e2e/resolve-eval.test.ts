@@ -49,7 +49,7 @@ describe.skipIf(!process.env.TYPESAFE_API_KEY)('Jev resolves the fixture steps t
           step,
           scenarioName: scenario.name,
           previousSteps: scenario.steps.slice(0, index).map((s) => s.text),
-          snapshot: await snapshot(page),
+          snapshot: await snapshot(page, { relevantTo: step.text }),
           values: extractValues(step),
           client,
           minConfidence: 0.6,
@@ -74,7 +74,7 @@ describe.skipIf(!process.env.TYPESAFE_API_KEY)('Jev resolves the fixture steps t
         await execute(page, expected, {
           baseUrl: server.url,
           stepText: step.text,
-          semantic: async (text) => semanticCheck(real, text, await snapshot(page)),
+          semantic: async (text) => semanticCheck(real, text, await snapshot(page, { elements: false })),
         });
       }
       await context.close();

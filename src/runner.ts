@@ -141,7 +141,7 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
                 step,
                 scenarioName: scenario.name,
                 previousSteps,
-                snapshot: await snapshot(page),
+                snapshot: await snapshot(page, { relevantTo: step.text }),
                 values: extractValues(step),
                 client: getClient(),
                 minConfidence: options.minConfidence,
@@ -151,7 +151,7 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
               execute(page, resolved, {
                 baseUrl: options.baseUrl,
                 stepText: step.text,
-                semantic: frozen ? undefined : async (text) => semanticCheck(getClient(), text, await snapshot(page)),
+                semantic: frozen ? undefined : async (text) => semanticCheck(getClient(), text, await snapshot(page, { elements: false })),
               }),
             onStep: (result) => options.reporter.step(result),
           });

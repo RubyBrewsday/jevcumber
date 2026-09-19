@@ -1,4 +1,5 @@
 import { TypeSafeClient, choice, noul } from '@typesafe-ai/sdk';
+import { mostRelevant } from './relevance.js';
 import type { Assertion, ElementInfo, ResolveOutcome, ResolvedStep, Snapshot, Step } from './types.js';
 
 const MODEL = 'jev-latest';
@@ -123,22 +124,9 @@ const VALUE_QUESTIONS: [ValueQuestionId, string, string][] = [
   ],
 ];
 
-const tokens = (text: string) => new Set(text.toLowerCase().match(/[a-z0-9]+/g) ?? []);
-
 /** Cap a large page to the elements sharing the most words with the step, preserving page order. */
 export function shortlist(elements: ElementInfo[], stepText: string, max: number): ElementInfo[] {
-  if (elements.length <= max) return elements;
-  const stepTokens = tokens(stepText);
-  const scored = elements.map((element, index) => {
-    let overlap = 0;
-    for (const token of tokens(`${element.role} ${element.name}`)) if (stepTokens.has(token)) overlap++;
-    return { element, index, overlap };
-  });
-  return scored
-    .sort((a, b) => b.overlap - a.overlap || a.index - b.index)
-    .slice(0, max)
-    .sort((a, b) => a.index - b.index)
-    .map((entry) => entry.element);
+  return mostRelevant(elements, stepText, (element) => `${element.role} ${element.name}`, max);
 }
 
 export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
@@ -231,7 +219,11 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
   let resolved: ResolvedStep;
   switch (kind) {
     case undefined:
-      return undefinedStep('Jev found no browser interaction or check in this step.');
+      return undefinedStep(
+        values.length > 0
+          ? 'Jev found no browser interaction or check in this step.'
+          : 'Jev found no browser interaction or check in this step. jevcumber never invents values: if the step should type or look for something, put it in quotes, e.g. I search for "Michelle Obama".',
+      );
     case 'navigate': {
       const value = pickValue('target_url');
       if (value === undefined) {
@@ -320,9 +312,12 @@ export async function semanticCheck(client: JevClient, stepText: string, snapsho
   const { answers } = await client.systemOne({
     state: { expectation: stepText, page: { url: snapshot.url, title: snapshot.title, text: snapshot.text } },
     questions: {
-      holds: noul(
-        'A test step states the expectation in `expectation`. Judging only from the web page in `page`, does the page satisfy that expectation?',
-      ),
+      // Spelling out both answers matters: measured on live pages, it moved true expectations from
+      // 0.67-0.88 to 0.95-0.98 while false ones stayed at or below 0.22.
+      holds: noul('Does the web page in `page` show what `expectation` describes?', {
+        true: "The page's title and content are what the expectation describes. A page mainly about the named subject counts, even if the expectation uses a short or informal name for it.",
+        false: 'The page is about something else, or is an error page, a login wall, a bot check, or empty.',
+      }),
     },
     model: MODEL,
   });

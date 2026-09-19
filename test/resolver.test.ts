@@ -167,6 +167,13 @@ describe('resolve: refusing to guess', () => {
     expect(outcome).toMatchObject({ ok: false, reason: 'undefined' });
   });
 
+  it('explains that values are never invented when an unresolvable step has no literals', async () => {
+    const outcome = await resolve(input(when('I can search for his wife'), fakeClient({ kind: answer('none') }).client, []));
+    expect(outcome).toMatchObject({ ok: false, reason: 'undefined' });
+    expect((outcome as { detail: string }).detail).toMatch(/never invents/);
+    expect((outcome as { detail: string }).detail).toMatch(/quotes/);
+  });
+
   it('is undefined when a required element is none', async () => {
     const { client } = fakeClient({ kind: answer('click'), element: answer('none') });
     const outcome = await resolve(input(when('I click Sign up'), client, []));
