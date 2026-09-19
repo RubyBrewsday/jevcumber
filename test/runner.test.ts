@@ -7,7 +7,7 @@ import { runScenario, type ScenarioDeps } from '../src/runner.js';
 import type { ResolveOutcome, ResolvedStep, Scenario } from '../src/types.js';
 
 const scenario: Scenario = {
-  uri: 'a.feature', feature: 'A', name: 's', tags: [],
+  uri: 'a.feature', feature: 'A', name: 's', occurrence: 0, tags: [],
   steps: [
     { keyword: 'Given', text: 'one' },
     { keyword: 'When', text: 'two' },
@@ -139,6 +139,25 @@ describe('runScenario', () => {
       { execute: async () => { throw new Error('boom'); } },
       { 0: nav('/a'), 1: nav('/b'), 2: nav('/c') },
     );
+    await runScenario(scenario, deps);
+    lock.save(true);
+    expect(Object.keys(JSON.parse(readFileSync(path, 'utf8')).steps)).toHaveLength(3);
+  });
+
+  it('does not prune the lockfile entry of a step that fails to resolve in update mode', async () => {
+    const { lock: seeded, path } = harness({}, { 0: nav('/one'), 1: nav('/two'), 2: nav('/three') });
+    seeded.save(false);
+    // Reload so the lockfile starts with nothing touched, as a fresh run would see it
+    // (harness's seeding via lock.set already marks entries touched, which would mask this bug).
+    const lock = Lockfile.load(path);
+    const deps: ScenarioDeps = {
+      mode: 'update',
+      lock,
+      resolve: async (step) =>
+        step.text === 'two' ? { ok: false, reason: 'ambiguous', detail: 'which one?' } : ok(nav(`/${step.text}`)),
+      isValid: async () => true,
+      execute: async () => {},
+    };
     await runScenario(scenario, deps);
     lock.save(true);
     expect(Object.keys(JSON.parse(readFileSync(path, 'utf8')).steps)).toHaveLength(3);

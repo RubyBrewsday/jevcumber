@@ -27,8 +27,8 @@ export async function runScenario(scenario: Scenario, deps: ScenarioDeps): Promi
 
   const runStep = async (step: Step, index: number): Promise<StepResult> => {
     const key = stepKey(scenario, index);
+    deps.lock.touch(key); // a run must not prune an entry for a step it started, even if it never resolves
     if (skipping) {
-      deps.lock.touch(key); // a failing run must not prune entries it never reached
       return { step, status: 'skipped' };
     }
 
