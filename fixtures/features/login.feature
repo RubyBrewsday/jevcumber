@@ -24,3 +24,10 @@ Feature: Login
     And I click the Log in button
     Then I should see "Invalid email or password"
     And I should not see "Welcome"
+
+  Scenario: quoted control names
+    When I fill in "Email" with "bob@example.com"
+    And I fill in "Password" with "secret"
+    And I click "Log in"
+    Then I should see "Welcome, bob"
+    And the "New todo" field should be visible

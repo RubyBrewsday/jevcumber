@@ -39,13 +39,32 @@ const KIND = {
 } as const;
 
 const ASSERTION = {
-  text_visible: 'The step expects specific literal text, given in `values`, to be visible on the page.',
-  text_not_visible: 'The step expects specific literal text, given in `values`, to be absent from the page.',
-  element_visible: 'The step expects a particular control from `page.elements` to be present, without caring about its content.',
-  element_has_value: 'The step expects a particular input from `page.elements` to contain a literal from `values`.',
-  url_contains: 'The step expects the browser address to be, or contain, a URL or path given in `values`.',
-  semantic: 'The expectation is descriptive rather than literal (e.g. "a friendly error", "the list is sorted") and cannot be reduced to any of the other forms.',
-} as const;
+  text_visible: {
+    what: 'The step expects a piece of text content from `values` to appear on the page: a message, heading, or other copy.',
+    not_for: 'A control (field, button, link, checkbox) being shown, even when the control\'s name is quoted. That is element_visible.',
+    examples: ['I should see "Welcome back"', 'the page says "Saved"'],
+  },
+  text_not_visible: {
+    what: 'The step expects a piece of text content from `values` to be absent from the page.',
+    examples: ['I should not see "Error"'],
+  },
+  element_visible: {
+    what: 'The step expects a control from `page.elements` (a field, button, link, checkbox) to be present or visible, whatever it contains. The control may be named in quotes.',
+    examples: ['the "Save" button is shown', 'there is a search field', 'the "Remember me" checkbox is present'],
+  },
+  element_has_value: {
+    what: 'The step expects a particular input from `page.elements` to contain a literal from `values`.',
+    examples: ['the email field contains "a@b.c"', 'the "Country" dropdown shows "France"'],
+  },
+  url_contains: {
+    what: 'The step expects the browser address to be, or contain, a URL or path given in `values`.',
+    examples: ['the URL should contain "/todos"', 'I am redirected to "/login"'],
+  },
+  semantic: {
+    what: 'The expectation is descriptive rather than literal and cannot be reduced to any of the other forms.',
+    examples: ['I see a friendly error', 'the list is sorted by date'],
+  },
+};
 
 const KEY = {
   Enter: 'The Enter or Return key, including "submit with the keyboard".',
@@ -60,6 +79,27 @@ const KEY = {
   ArrowRight: 'The right arrow key.',
   none: 'The step does not name any of these keys.',
 } as const;
+
+type ValueQuestionId = 'target_url' | 'input_text' | 'expected_text';
+
+// [question id, instructions, description of the no-match option]
+const VALUE_QUESTIONS: [ValueQuestionId, string, string][] = [
+  [
+    'target_url',
+    'Assume the Gherkin step in `step.text` asks the browser to open a page. Which literal in `values` is the URL or path to open?',
+    'None of the literals is a URL or path.',
+  ],
+  [
+    'input_text',
+    'Assume the Gherkin step in `step.text` asks for text to be typed into a field, or an option to be chosen from a dropdown. Which literal in `values` is the text to type or the option to choose? A literal that only names the field is not it.',
+    'None of the literals is text to type or an option to choose; they only name the field.',
+  ],
+  [
+    'expected_text',
+    'Assume the Gherkin step in `step.text` checks the page. Which literal in `values` is the text, field value, or URL fragment the step expects to find, or expects to be absent? A literal that only names the element being checked is not it.',
+    'None of the literals is an expected text, value, or URL fragment.',
+  ],
+];
 
 const tokens = (text: string) => new Set(text.toLowerCase().match(/[a-z0-9]+/g) ?? []);
 
@@ -117,13 +157,12 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
     );
   }
   if (values.length > 0) {
-    questions.value = choice(
-      'Which literal in `values` is the data the Gherkin step in `step.text` wants typed, selected, opened, or checked for? This is the data itself, not a literal that merely names the target element.',
-      {
-        ...Object.fromEntries(Object.entries(valueById).map(([id, value]) => [id, { literal: value }])),
-        none: 'None of the literals is data for this step; any literals only name the target element.',
-      },
-    );
+    // One question per purpose: a generic "which literal is the data?" let `none` look plausible
+    // for navigation, because a path can also be read as naming the step's target.
+    const options = Object.fromEntries(Object.entries(valueById).map(([id, value]) => [id, { literal: value }]));
+    for (const [id, instructions, none] of VALUE_QUESTIONS) {
+      questions[id] = choice(instructions, { ...options, none });
+    }
   }
 
   const { answers } = await client.systemOne({ state, questions, model: MODEL });
@@ -145,8 +184,8 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
     const id = pick('element');
     return elements.find((element) => element.id === id);
   };
-  const pickValue = () => {
-    const id = pick('value');
+  const pickValue = (question: ValueQuestionId) => {
+    const id = pick(question);
     return id === undefined ? undefined : valueById[id];
   };
   const undefinedStep = (detail: string): ResolveOutcome => ({ ok: false, reason: 'undefined', detail });
@@ -160,7 +199,7 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
     case undefined:
       return undefinedStep('Jev found no browser interaction or check in this step.');
     case 'navigate': {
-      const value = pickValue();
+      const value = pickValue('target_url');
       if (value === undefined) {
         return undefinedStep('Navigation steps need a literal path or URL, e.g. Given I am on "/login".');
       }
@@ -179,7 +218,7 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
     case 'select': {
       const element = pickElement();
       if (!element) return undefinedStep(NO_ELEMENT);
-      const value = pickValue();
+      const value = pickValue('input_text');
       if (value === undefined) return undefinedStep(NO_VALUE);
       resolved = { kind, locator: element.locator, value };
       break;
@@ -203,11 +242,11 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
       } else if (form === 'element_has_value') {
         const element = pickElement();
         if (!element) return undefinedStep(NO_ELEMENT);
-        const value = pickValue();
+        const value = pickValue('expected_text');
         if (value === undefined) return undefinedStep(NO_VALUE);
         assertion = { form, locator: element.locator, value };
       } else {
-        const value = pickValue();
+        const value = pickValue('expected_text');
         if (value === undefined) return undefinedStep(NO_VALUE);
         assertion = { form, value };
       }
@@ -221,7 +260,7 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
     const describe = (label: string): string => {
       const element = elements.find((e) => e.id === label);
       if (weakest.id === 'element' && element) return `${element.role} "${element.name}"`;
-      if (weakest.id === 'value' && label in valueById) return JSON.stringify(valueById[label]);
+      if (weakest.id !== 'element' && label in valueById) return JSON.stringify(valueById[label]);
       return label;
     };
     const top = Object.entries(weakest.answer.probabilities)
@@ -232,7 +271,7 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
     return {
       ok: false,
       reason: 'ambiguous',
-      detail: `Jev was not confident about the ${weakest.id} (${weakest.answer.confidence.toFixed(2)} < ${minConfidence}). Candidates: ${top}. Reword the step to be more specific.`,
+      detail: `Jev was not confident about the ${weakest.id.replace('_', ' ')} (${weakest.answer.confidence.toFixed(2)} < ${minConfidence}). Candidates: ${top}. Reword the step to be more specific.`,
     };
   }
 

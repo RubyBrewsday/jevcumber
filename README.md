@@ -75,7 +75,7 @@ Sequential scenarios; no hooks, iframes, file uploads, drag and drop, or multi-t
 ```bash
 npm install && npx playwright install chromium
 npm test            # unit + frozen e2e (no API key needed)
-TYPESAFE_API_KEY=... npm test   # also runs the live smoke test
+TYPESAFE_API_KEY=... npm test   # also runs the live smoke test and the resolver eval
 ```
 
 `npm run jevcumber -- features/ --base-url http://localhost:3000` builds first and
@@ -83,3 +83,16 @@ runs the compiled `dist/cli.js`. Running `tsx src/cli.ts` directly does not work
 tsx/esbuild's `keepNames` rewrites the function passed to `page.evaluate` in
 `snapshot.ts` to call a helper that doesn't exist inside the page, so it crashes on
 the first snapshot.
+
+### Tuning the questions Jev is asked
+
+`e2e/resolve-eval.test.ts` asks Jev about every step in `fixtures/features/` on the page that step
+really sees and compares the answer with the known-good resolution in `fixtures/expected.ts`. Run it
+verbosely to see every answer's probability distribution:
+
+```bash
+npx vitest run e2e/resolve-eval.test.ts --silent=false --reporter=verbose
+```
+
+When a kind of step resolves badly, add a scenario for it to the fixture, watch it miss, then adjust
+the wording in `src/resolver.ts`. Don't paste the fixture's own sentence into a question's examples.

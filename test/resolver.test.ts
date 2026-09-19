@@ -50,12 +50,16 @@ describe('resolve: request shape', () => {
       values: { v1: 'a@b.c' },
     });
     const { questions } = requests[0];
-    expect(Object.keys(questions).sort()).toEqual(['assertion', 'element', 'key', 'kind', 'value']);
+    expect(Object.keys(questions).sort()).toEqual(
+      ['assertion', 'element', 'expected_text', 'input_text', 'key', 'kind', 'target_url'],
+    );
     expect(Object.keys(questions.kind.criteria)).toEqual(
       ['navigate', 'click', 'fill', 'select', 'check', 'uncheck', 'press', 'assert', 'none'],
     );
     expect(Object.keys(questions.element.criteria)).toEqual(['e1', 'e2', 'none']);
-    expect(Object.keys(questions.value.criteria)).toEqual(['v1', 'none']);
+    for (const id of ['target_url', 'input_text', 'expected_text']) {
+      expect(Object.keys(questions[id].criteria), id).toEqual(['v1', 'none']);
+    }
   });
 
   it('omits the element and value questions when there is nothing to choose from', async () => {
@@ -67,17 +71,17 @@ describe('resolve: request shape', () => {
 
 describe('resolve: mapping answers to steps', () => {
   const cases: [string, Record<string, unknown>, string[], unknown][] = [
-    ['navigate', { kind: answer('navigate'), value: answer('v1') }, ['/login'], { kind: 'navigate', value: '/login' }],
+    ['navigate', { kind: answer('navigate'), target_url: answer('v1') }, ['/login'], { kind: 'navigate', value: '/login' }],
     ['click', { kind: answer('click'), element: answer('e2') }, [], { kind: 'click', locator: SNAP.elements[1].locator }],
-    ['fill', { kind: answer('fill'), element: answer('e1'), value: answer('v2') }, ['Email', 'a@b.c'],
+    ['fill', { kind: answer('fill'), element: answer('e1'), input_text: answer('v2') }, ['Email', 'a@b.c'],
       { kind: 'fill', locator: SNAP.elements[0].locator, value: 'a@b.c' }],
     ['press with element', { kind: answer('press'), key: answer('Enter'), element: answer('e1') }, [],
       { kind: 'press', key: 'Enter', locator: SNAP.elements[0].locator }],
     ['press without element', { kind: answer('press'), key: answer('Escape'), element: answer('none') }, [],
       { kind: 'press', key: 'Escape' }],
-    ['assert text', { kind: answer('assert'), assertion: answer('text_visible'), value: answer('v1') }, ['Welcome'],
+    ['assert text', { kind: answer('assert'), assertion: answer('text_visible'), expected_text: answer('v1') }, ['Welcome'],
       { kind: 'assert', assertion: { form: 'text_visible', value: 'Welcome' } }],
-    ['assert element value', { kind: answer('assert'), assertion: answer('element_has_value'), element: answer('e1'), value: answer('v1') },
+    ['assert element value', { kind: answer('assert'), assertion: answer('element_has_value'), element: answer('e1'), expected_text: answer('v1') },
       ['a@b.c'], { kind: 'assert', assertion: { form: 'element_has_value', locator: SNAP.elements[0].locator, value: 'a@b.c' } }],
     ['assert semantic', { kind: answer('assert'), assertion: answer('semantic') }, [],
       { kind: 'assert', assertion: { form: 'semantic' } }],
@@ -91,7 +95,9 @@ describe('resolve: mapping answers to steps', () => {
     const { client } = fakeClient({
       kind: answer('click', 0.9),
       element: answer('e2', 0.7),
-      value: answer('v1', 0.1), // irrelevant to click: must be ignored
+      input_text: answer('v1', 0.1), // irrelevant to click: must be ignored
+      target_url: answer('v1', 0.1),
+      expected_text: answer('v1', 0.1),
       assertion: answer('semantic', 0.2),
       key: answer('none', 0.3),
     });

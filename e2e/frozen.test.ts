@@ -6,30 +6,8 @@ import { startFixtureServer } from '../fixtures/app/server.js';
 import { main } from '../src/cli.js';
 import { parseFeature } from '../src/gherkin.js';
 import { lockPathFor, stepKey } from '../src/lockfile.js';
-import type { LocatorSpec, ResolvedStep } from '../src/types.js';
-
-const email: LocatorSpec = { by: 'role', role: 'textbox', name: 'Email' };
-const password: LocatorSpec = { by: 'label', value: 'Password' };
-const logIn: LocatorSpec = { by: 'role', role: 'button', name: 'Log in' };
-const newTodo: LocatorSpec = { by: 'role', role: 'textbox', name: 'New todo' };
-const add: LocatorSpec = { by: 'role', role: 'button', name: 'Add' };
-const sees = (value: string): ResolvedStep => ({ kind: 'assert', assertion: { form: 'text_visible', value } });
-
-const RESOLVED: Record<string, ResolvedStep> = {
-  'I am on "/login"': { kind: 'navigate', value: '/login' },
-  'I fill in the email field with "alice@example.com"': { kind: 'fill', locator: email, value: 'alice@example.com' },
-  'I fill in the password field with "secret"': { kind: 'fill', locator: password, value: 'secret' },
-  'I fill in the password field with "wrong"': { kind: 'fill', locator: password, value: 'wrong' },
-  'I click the Log in button': { kind: 'click', locator: logIn },
-  'I press Enter in the password field': { kind: 'press', key: 'Enter', locator: password },
-  'I fill in the new todo field with "Buy milk"': { kind: 'fill', locator: newTodo, value: 'Buy milk' },
-  'I click the Add button': { kind: 'click', locator: add },
-  'I should see "Welcome, alice"': sees('Welcome, alice'),
-  'I should see "Buy milk"': sees('Buy milk'),
-  'I should see "Invalid email or password"': sees('Invalid email or password'),
-  'I should not see "Welcome"': { kind: 'assert', assertion: { form: 'text_not_visible', value: 'Welcome' } },
-  'the URL should contain "/todos"': { kind: 'assert', assertion: { form: 'url_contains', value: '/todos' } },
-};
+import { RESOLVED, sees } from '../fixtures/expected.js';
+import type { ResolvedStep } from '../src/types.js';
 
 function workspace(overrides: Record<string, ResolvedStep | null> = {}): { dir: string; feature: string } {
   const dir = mkdtempSync(join(tmpdir(), 'jevcumber-e2e-'));
