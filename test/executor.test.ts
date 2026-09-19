@@ -6,7 +6,7 @@ import type { LocatorSpec } from '../src/types.js';
 const HTML = `
 <label for="email">Email</label><input id="email">
 <label><input type="checkbox"> Remember me</label>
-<select aria-label="Country"><option>UK</option><option>France</option></select>
+<select aria-label="Country"><option>UK</option><option>France</option><option value="fr">Republique</option></select>
 <button onclick="document.getElementById('out').textContent = 'Clicked!'">Go</button>
 <input aria-label="Search" onkeydown="if (event.key === 'Enter') document.getElementById('out').textContent = 'Searched'">
 <p id="out"></p>
@@ -37,6 +37,10 @@ describe('execute: actions', () => {
 
     await execute(page, { kind: 'select', locator: role('combobox', 'Country'), value: 'France' }, ctx);
     expect(await page.getByRole('combobox').inputValue()).toBe('France');
+
+    // No option is labelled "fr": falls back to selecting by option value.
+    await execute(page, { kind: 'select', locator: role('combobox', 'Country'), value: 'fr' }, ctx);
+    expect(await page.getByRole('combobox').inputValue()).toBe('fr');
 
     await execute(page, { kind: 'click', locator: role('button', 'Go') }, ctx);
     expect(await page.locator('#out').textContent()).toBe('Clicked!');

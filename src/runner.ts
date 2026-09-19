@@ -111,6 +111,7 @@ async function isValid(page: Page, resolved: ResolvedStep): Promise<boolean> {
 
 export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
   const scenarios = loadFeatures(options.paths, options.tags);
+  if (scenarios.length === 0) return []; // let the CLI report "no scenarios found"; no summary to print
   const frozen = options.mode === 'frozen';
 
   let client: JevClient | undefined;

@@ -94,6 +94,8 @@ describe('loadFeatures', () => {
     writeFileSync(join(dir, 'notes.txt'), 'ignore me');
 
     expect(findFeatureFiles([dir])).toEqual([join(dir, 'nested', 'login.feature')]);
+    // Passing the file both directly and via its containing directory must not run it twice.
+    expect(findFeatureFiles([dir, join(dir, 'nested', 'login.feature')])).toEqual([join(dir, 'nested', 'login.feature')]);
     expect(loadFeatures([dir], '@smoke').map((s) => s.name)).toEqual(['log in as a@b.c', 'log in as d@e.f']);
     expect(loadFeatures([dir], 'not @smoke').map((s) => s.name)).toEqual([
       'table and docstring',

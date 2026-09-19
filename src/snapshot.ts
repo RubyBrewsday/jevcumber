@@ -97,6 +97,8 @@ function collect(): { title: string; text: string; elements: RawElement[] } {
       label: label || undefined,
       placeholder: placeholder || undefined,
       text: text || undefined,
+      // TODO: only password inputs are treated as sensitive; other sensitive inputs (e.g.
+      // autocomplete="cc-number") still send their values in the snapshot.
       sensitive: type === 'password' || undefined,
     });
   }

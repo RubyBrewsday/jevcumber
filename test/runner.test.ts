@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Lockfile, stepKey } from '../src/lockfile.js';
-import { runScenario, type ScenarioDeps } from '../src/runner.js';
+import { runAll, runScenario, type Reporter, type ScenarioDeps } from '../src/runner.js';
 import type { ResolveOutcome, ResolvedStep, Scenario } from '../src/types.js';
 
 const scenario: Scenario = {
@@ -168,5 +168,27 @@ describe('runScenario', () => {
     const { deps } = harness({ onStep: (r) => seen.push(r.status) });
     await runScenario(scenario, deps);
     expect(seen).toEqual(['passed', 'passed', 'passed']);
+  });
+});
+
+describe('runAll', () => {
+  it('returns no results without launching a browser or reporting a summary when there are no scenarios', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'jevcumber-')); // empty: no .feature files
+    const calls: string[] = [];
+    const reporter: Reporter = {
+      scenarioStart: () => calls.push('scenarioStart'),
+      step: () => calls.push('step'),
+      end: () => calls.push('end'),
+    };
+    const results = await runAll({
+      paths: [dir],
+      baseUrl: 'http://localhost:1',
+      mode: 'frozen',
+      headed: false,
+      minConfidence: 0.6,
+      reporter,
+    });
+    expect(results).toEqual([]);
+    expect(calls).toEqual([]);
   });
 });

@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { generateMessages } from '@cucumber/gherkin';
 import { IdGenerator, SourceMediaType } from '@cucumber/messages';
 import parseTagExpression from '@cucumber/tag-expressions';
@@ -52,12 +52,16 @@ export function parseFeature(source: string, uri: string): Scenario[] {
 
 export function findFeatureFiles(paths: string[]): string[] {
   const files: string[] = [];
+  const seen = new Set<string>(); // resolved absolute path, so the same file reached two ways runs once
   const visit = (path: string) => {
     if (statSync(path).isDirectory()) {
       for (const entry of readdirSync(path).sort()) {
         if (entry !== 'node_modules') visit(join(path, entry));
       }
     } else if (path.endsWith('.feature')) {
+      const absolute = resolve(path);
+      if (seen.has(absolute)) return;
+      seen.add(absolute);
       files.push(path);
     }
   };

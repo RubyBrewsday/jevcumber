@@ -128,6 +128,11 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
 
   const { answers } = await client.systemOne({ state, questions, model: MODEL });
 
+  const kindAnswer = answers.kind as ChoiceAnswer | undefined;
+  if (!kindAnswer || typeof kindAnswer.choice !== 'string') {
+    throw new Error('Unexpected response from Jev: no answer for "kind".');
+  }
+
   // Record every answer we actually rely on; confidence is the least certain of these.
   const consumed: { id: string; answer: ChoiceAnswer }[] = [];
   const pick = (id: string): string | undefined => {
@@ -245,7 +250,11 @@ export async function semanticCheck(client: JevClient, stepText: string, snapsho
     },
     model: MODEL,
   });
-  return answers.holds.noul as number;
+  const holds = answers.holds as { noul?: unknown } | undefined;
+  if (typeof holds?.noul !== 'number') {
+    throw new Error('Unexpected response from Jev: no answer for "holds".');
+  }
+  return holds.noul;
 }
 
 export function createClient(): JevClient {

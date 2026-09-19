@@ -12,12 +12,21 @@ function parseConfidence(raw: string): number {
   return value;
 }
 
+function parseBaseUrl(raw: string): string {
+  try {
+    new URL(raw);
+  } catch {
+    throw new InvalidArgumentError('must be an absolute URL, e.g. http://localhost:3000');
+  }
+  return raw;
+}
+
 export async function main(argv: string[]): Promise<number> {
   const program = new Command()
     .name('jevcumber')
     .description('Run Cucumber feature files against a web UI with no step definitions.')
     .argument('<paths...>', 'feature files or directories')
-    .requiredOption('--base-url <url>', 'URL that relative navigation resolves against')
+    .requiredOption('--base-url <url>', 'URL that relative navigation resolves against', parseBaseUrl)
     .option('--frozen', 'replay the lockfile only; never call Jev (for CI)', false)
     .option('--update', 'ignore the lockfile and re-resolve every step', false)
     .option('--headed', 'show the browser', false)

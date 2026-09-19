@@ -133,6 +133,22 @@ describe('resolve: refusing to guess', () => {
   });
 });
 
+describe('resolve: malformed responses', () => {
+  it('throws when the kind answer is missing rather than reporting the step as undefined', async () => {
+    const { client } = fakeClient({}); // no `kind` answer at all
+    await expect(resolve(input(when('I click Go'), client, []))).rejects.toThrow(
+      /Unexpected response from Jev: no answer for "kind"/,
+    );
+  });
+
+  it('throws when the kind answer has no string choice', async () => {
+    const { client } = fakeClient({ kind: { confidence: 0.9, probabilities: {} } });
+    await expect(resolve(input(when('I click Go'), client, []))).rejects.toThrow(
+      /Unexpected response from Jev: no answer for "kind"/,
+    );
+  });
+});
+
 describe('shortlist', () => {
   it('keeps everything at or under the cap, preserving order', () => {
     expect(shortlist(SNAP.elements, 'anything', 60)).toEqual(SNAP.elements);
@@ -153,5 +169,12 @@ describe('semanticCheck', () => {
     expect(await semanticCheck(client, 'I see a friendly error', SNAP)).toBe(0.93);
     expect(requests[0].state).toEqual({ expectation: 'I see a friendly error', page: { url: SNAP.url, title: SNAP.title, text: SNAP.text } });
     expect(requests[0].questions.holds.type).toBe('noul');
+  });
+
+  it('throws on a malformed response instead of silently coercing a bad value to a number', async () => {
+    const { client } = fakeClient({ holds: { type: 'noul' } }); // no `noul` field
+    await expect(semanticCheck(client, 'I see a friendly error', SNAP)).rejects.toThrow(
+      /Unexpected response from Jev: no answer for "holds"/,
+    );
   });
 });

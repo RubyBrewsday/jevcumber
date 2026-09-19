@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cpSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -80,5 +80,16 @@ describe('jevcumber --frozen against the fixture app', () => {
     expect(await main([dir, '--base-url', server.url, '--frozen', '--tags', '@nonexistent'])).toBe(1); // no scenarios
     expect(await main([dir, '--base-url', server.url, '--frozen', '--update'])).toBe(1);
     expect(await main([dir])).toBe(1); // missing --base-url
+  });
+
+  it('rejects a non-absolute --base-url at parse time, before touching the browser', async () => {
+    const { dir } = workspace();
+    const errors = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      expect(await main([dir, '--base-url', 'not-a-url', '--frozen'])).toBe(1);
+      expect(errors.mock.calls.flat().join('\n')).toMatch(/absolute URL/);
+    } finally {
+      errors.mockRestore();
+    }
   });
 });

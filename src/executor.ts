@@ -1,9 +1,13 @@
-import { expect, type Page } from '@playwright/test';
+import { expect, type Locator, type Page } from '@playwright/test';
 import { toLocator } from './locators.js';
 import type { Assertion, LocatorSpec, ResolvedStep } from './types.js';
 
 export const SEMANTIC_THRESHOLD = 0.8;
 const ASSERT_TIMEOUT = 5000;
+// Try selecting by visible label first (what a step's literal usually names); fall back to the
+// option's value for cases like <option value="fr">Republique</option>. The label attempt gets a
+// short timeout so a value-only step doesn't pay the full default timeout before falling back.
+const SELECT_LABEL_TIMEOUT = 1000;
 
 export interface ExecuteContext {
   baseUrl: string;
@@ -23,6 +27,18 @@ const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&
 // Let the page react to the action so the next snapshot sees its settled state.
 async function settle(page: Page): Promise<void> {
   await page.waitForLoadState('networkidle', { timeout: 500 }).catch(() => {});
+}
+
+async function select(locator: Locator, value: string): Promise<void> {
+  try {
+    await locator.selectOption({ label: value }, { timeout: SELECT_LABEL_TIMEOUT });
+  } catch (labelError) {
+    try {
+      await locator.selectOption({ value });
+    } catch {
+      throw labelError;
+    }
+  }
 }
 
 async function check(page: Page, assertion: Assertion, ctx: ExecuteContext): Promise<void> {
@@ -46,6 +62,11 @@ async function check(page: Page, assertion: Assertion, ctx: ExecuteContext): Pro
       if (probability < SEMANTIC_THRESHOLD) {
         throw new Error(`Jev judged the expectation unmet (p=${probability.toFixed(2)}, needs ≥ ${SEMANTIC_THRESHOLD}).`);
       }
+      return;
+    }
+    default: {
+      const unreachable: never = assertion;
+      throw new Error(`Unhandled assertion form: ${JSON.stringify(unreachable)}`);
     }
   }
 }
@@ -68,7 +89,7 @@ export async function execute(page: Page, resolved: ResolvedStep, ctx: ExecuteCo
       await toLocator(page, resolved.locator).fill(resolved.value);
       break;
     case 'select':
-      await toLocator(page, resolved.locator).selectOption({ label: resolved.value });
+      await select(toLocator(page, resolved.locator), resolved.value);
       break;
     case 'press':
       if (resolved.locator) await toLocator(page, resolved.locator).press(resolved.key);
@@ -76,6 +97,10 @@ export async function execute(page: Page, resolved: ResolvedStep, ctx: ExecuteCo
       break;
     case 'assert':
       return check(page, resolved.assertion, ctx);
+    default: {
+      const unreachable: never = resolved;
+      throw new Error(`Unhandled resolved step kind: ${JSON.stringify(unreachable)}`);
+    }
   }
   await settle(page);
 }
