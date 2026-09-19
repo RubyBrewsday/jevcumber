@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>jevcumber — Cucumber tests. Hold the step definitions.</title>
+<meta name="description" content="Write Cucumber tests with just the .feature file. jevcumber reads your Gherkin, opens a real browser, and lets Jev work out what each step means on the page. No step definitions, no glue code.">
+<link rel="canonical" href="https://jevcumber.dev/">
+<meta property="og:title" content="jevcumber — Cucumber tests. Hold the step definitions.">
+<meta property="og:description" content="Write the .feature file. That's the whole test.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://jevcumber.dev/">
+<meta property="og:image" content="https://jevcumber.dev/og.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#2f5d34">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🥒</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Hanken+Grotesk:ital,wght@0,400;0,500;0,700;1,400&family=Martian+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #f3edd7;
+  --paper-deep: #e9e0c2;
+  --card: #fbf8ec;
+  --ink: #17301b;
+  --ink-soft: #46604a;
+  --pickle: #2f5d34;
+  --pickle-bright: #4f8a3c;
+  --brine: #c9d66b;
+  --mustard: #e2b13c;
+  --tomato: #c4462d;
+  --rule: #17301b26;
+  --display: "Bagel Fat One", "Cooper Black", serif;
+  --body: "Hanken Grotesk", system-ui, sans-serif;
+  --mono: "Martian Mono", ui-monospace, monospace;
+}
+* { box-sizing: border-box; margin: 0; }
+html { scroll-behavior: smooth; overflow-x: clip; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 18px/1.6 var(--body);
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+/* deli-paper grain */
+body::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 50; opacity: .22; mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 .1 0 0 0 0 .18 0 0 0 0 .1 0 0 0 .55 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+a { color: inherit; }
+.wrap { width: min(1180px, 100% - 40px); margin-inline: auto; }
+code, pre, .mono { font-family: var(--mono); }
+code { font-size: .82em; background: var(--paper-deep); padding: .12em .4em; border-radius: 4px; }
+
+/* ---------- nav ---------- */
+nav { display: flex; align-items: center; justify-content: space-between; padding: 22px 0; }
+.mark { font: 400 28px/1 var(--display); color: var(--pickle); text-decoration: none; letter-spacing: .01em; }
+.mark span { display: inline-block; transform: rotate(-18deg) translateY(2px); margin-right: 4px; }
+nav ul { display: flex; gap: 26px; list-style: none; padding: 0; font-size: 15px; font-weight: 500; }
+nav ul a { text-decoration: none; border-bottom: 2px solid transparent; padding-bottom: 2px; transition: border-color .2s; }
+nav ul a:hover { border-color: var(--mustard); }
+@media (max-width: 640px) { nav ul li:not(:last-child) { display: none; } }
+
+/* ---------- hero ---------- */
+.hero { display: grid; grid-template-columns: 1fr 1fr; gap: 56px; align-items: center; padding: 48px 0 96px; }
+.eyebrow { font: 600 11.5px/1.5 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--ink-soft); display: flex; gap: 14px; align-items: center; }
+.eyebrow::before { content: ""; width: 34px; height: 2px; background: var(--mustard); }
+h1 { font: 400 clamp(46px, 6.6vw, 88px)/.95 var(--display); color: var(--pickle); margin: 22px 0 26px; letter-spacing: -.005em; }
+h1 em { font-style: normal; color: var(--ink); position: relative; white-space: nowrap; }
+h1 em::after { content: ""; position: absolute; left: -2%; right: -2%; bottom: .06em; height: .2em; background: var(--mustard); z-index: -1; transform: rotate(-1deg); border-radius: 3px; }
+.lede { font-size: 20px; max-width: 34em; color: var(--ink-soft); }
+.lede strong { color: var(--ink); font-weight: 700; }
+.cta { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 34px; }
+.btn { display: inline-flex; align-items: center; gap: 10px; font: 700 16px/1 var(--body); text-decoration: none; padding: 16px 22px; border-radius: 999px; border: 2px solid var(--ink); transition: transform .15s, box-shadow .15s; box-shadow: 4px 4px 0 var(--ink); }
+.btn:hover { transform: translate(-2px, -2px); box-shadow: 6px 6px 0 var(--ink); }
+.btn:active { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--ink); }
+.btn.primary { background: var(--pickle); color: var(--card); }
+.btn.ghost { background: var(--card); }
+
+.stack { position: relative; display: flex; flex-direction: column; }
+.card { background: var(--card); border: 2px solid var(--ink); border-radius: 10px; box-shadow: 8px 8px 0 var(--ink); }
+.feature-card { transform: rotate(-2.2deg); padding: 0 0 56px; overflow: hidden; margin-right: 28px; }
+.feature-card .tab { font: 600 11px/1 var(--mono); letter-spacing: .1em; padding: 12px 18px; border-bottom: 2px solid var(--ink); background: var(--brine); display: flex; justify-content: space-between; gap: 16px; white-space: nowrap; }
+.feature-card .tab span:last-child { opacity: .7; overflow: hidden; text-overflow: ellipsis; }
+.feature-card pre { font-size: clamp(10.5px, .82vw, 12px); line-height: 2.1; padding: 18px 20px 0; white-space: pre-wrap;
+  }
+.kw { color: var(--pickle-bright); font-weight: 600; }
+.str { color: var(--tomato); }
+.url { color: #2a5a8a; }
+
+/* the order ticket */
+.ticket { position: relative; align-self: flex-end; margin-top: -34px; width: min(390px, 92%); transform: rotate(2.4deg); background: #fffdf4; padding: 22px 22px 30px; font: 400 12.5px/1.9 var(--mono); filter: drop-shadow(7px 9px 0 #17301b);
+  --r: 7px; -webkit-mask: radial-gradient(var(--r) at 50% 100%, #0000 98%, #000) 50% 100% / calc(var(--r) * 2.6) 100% repeat-x; mask: radial-gradient(var(--r) at 50% 100%, #0000 98%, #000) 50% 100% / calc(var(--r) * 2.6) 100% repeat-x; }
+.ticket .head { text-align: center; border-bottom: 2px dashed var(--ink); padding-bottom: 10px; margin-bottom: 10px; letter-spacing: .14em; font-weight: 600; font-size: 11px; }
+.ticket .line { display: flex; gap: 8px; opacity: 0; animation: stamp .35s cubic-bezier(.2,1.6,.4,1) forwards; }
+.ticket .ok { color: var(--pickle-bright); font-weight: 600; }
+.ticket .line:nth-child(2) { animation-delay: .9s; } .ticket .line:nth-child(3) { animation-delay: 1.7s; }
+.ticket .line:nth-child(4) { animation-delay: 2.5s; } .ticket .line:nth-child(5) { animation-delay: 3.3s; }
+.ticket .total { border-top: 2px dashed var(--ink); margin-top: 10px; padding-top: 10px; font-weight: 600; opacity: 0; animation: stamp .35s 4.1s forwards; }
+@keyframes stamp { from { opacity: 0; transform: scale(1.25) rotate(-2deg); } to { opacity: 1; transform: none; } }
+@media (max-width: 920px) { .hero { grid-template-columns: 1fr; padding-bottom: 72px; } .feature-card pre { font-size: clamp(10px, 2.9vw, 13px); } }
+
+/* ---------- marquee ---------- */
+.band-clip { overflow: hidden; padding: 14px 0; }
+.band { background: var(--pickle); color: var(--brine); border-block: 2px solid var(--ink); overflow: hidden; transform: rotate(-1deg) scale(1.02); margin: 10px 0 0; }
+.band div { display: flex; width: max-content; animation: slide 38s linear infinite; font: 400 26px/1 var(--display); padding: 15px 0; letter-spacing: .03em; }
+.band span { padding-inline: 22px; } .band i { font-style: normal; color: var(--mustard); }
+@keyframes slide { to { transform: translateX(-50%); } }
+
+/* ---------- sections ---------- */
+section { padding: 110px 0 0; }
+h2 { font: 400 clamp(36px, 4.8vw, 60px)/1 var(--display); color: var(--pickle); margin: 14px 0 20px; }
+.sub { max-width: 40em; color: var(--ink-soft); font-size: 19px; }
+.reveal { opacity: 0; transform: translateY(26px); transition: opacity .7s ease, transform .7s cubic-bezier(.2,.8,.2,1); }
+.reveal.in { opacity: 1; transform: none; }
+
+/* demo */
+.screen { margin-top: 44px; border: 2px solid var(--ink); border-radius: 14px; overflow: hidden; box-shadow: 12px 12px 0 var(--mustard), 12px 12px 0 2px var(--ink); background: #000; }
+.screen .bar span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.screen .bar { background: var(--ink); color: var(--paper); font: 600 11px/1 var(--mono); letter-spacing: .1em; padding: 12px 16px; display: flex; gap: 8px; align-items: center; }
+.screen .bar b { width: 10px; height: 10px; border-radius: 50%; background: var(--tomato); display: inline-block; } .screen .bar b + b { background: var(--mustard); } .screen .bar b + b + b { background: var(--pickle-bright); margin-right: 10px; }
+.screen video { display: block; width: 100%; height: auto; }
+.aside { margin-top: 26px; display: flex; gap: 14px; align-items: flex-start; max-width: 46em; font-size: 16.5px; color: var(--ink-soft); }
+.aside::before { content: "☞"; font-size: 26px; line-height: 1; color: var(--tomato); }
+
+/* how it works */
+.steps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 22px; margin-top: 48px; counter-reset: s; }
+.step { padding: 26px 24px 28px; position: relative; }
+.step::before { counter-increment: s; content: counter(s); font: 400 64px/1 var(--display); color: var(--mustard); -webkit-text-stroke: 2px var(--ink); display: block; margin-bottom: 8px; }
+.step h3 { font: 700 20px/1.25 var(--body); margin-bottom: 8px; } .step p { font-size: 16px; color: var(--ink-soft); }
+@media (max-width: 860px) { .steps { grid-template-columns: 1fr; } }
+
+.menu { margin-top: 56px; display: grid; grid-template-columns: .8fr 1.2fr; border: 2px solid var(--ink); border-radius: 10px; background: var(--card); box-shadow: 8px 8px 0 var(--ink); overflow: hidden; }
+.menu .order { background: var(--ink); color: var(--paper); padding: 34px 30px; display: flex; flex-direction: column; justify-content: center; gap: 14px; }
+.menu .order small { font: 600 11px/1 var(--mono); letter-spacing: .14em; color: var(--brine); }
+.menu .order p { font: 600 17px/1.6 var(--mono); } .menu .order .str { color: var(--mustard); }
+.q { display: grid; grid-template-columns: 1fr auto; gap: 4px 18px; padding: 17px 26px; border-bottom: 1px solid var(--rule); align-items: center; }
+.q:last-child { border: 0; }
+.q .ask { font-size: 15px; color: var(--ink-soft); } .q .pick { font: 600 14px/1 var(--mono); color: var(--pickle); }
+.q .bar { grid-column: 1 / -1; height: 7px; background: var(--paper-deep); border-radius: 9px; overflow: hidden; }
+.q .bar i { display: block; height: 100%; width: 0; background: var(--pickle-bright); border-radius: 9px; transition: width 1.1s cubic-bezier(.2,.8,.2,1) .25s; }
+.in .q .bar i { width: var(--p); }
+@media (max-width: 860px) { .menu { grid-template-columns: 1fr; } }
+
+/* split: refuse + lockfile */
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; margin-top: 26px; }
+.panel { padding: 34px 32px 36px; } .panel h3 { font: 400 30px/1.05 var(--display); color: var(--pickle); margin-bottom: 12px; }
+.panel p { font-size: 16.5px; color: var(--ink-soft); } .panel p + p { margin-top: 12px; }
+.panel pre { margin-top: 20px; font-size: 11.5px; line-height: 1.85; background: var(--ink); color: #e9e0c2; padding: 18px; border-radius: 8px; white-space: pre-wrap; }
+.panel pre .warn { color: var(--mustard); } .panel pre .dim { color: #9fb0a0; } .panel pre .ok { color: var(--brine); }
+.panel.jar { background: var(--brine); }
+@media (max-width: 860px) { .split { grid-template-columns: 1fr; } }
+
+/* try it */
+.try { background: var(--ink); color: var(--paper); margin-top: 120px; padding: 100px 0 110px; position: relative; }
+.try::before { content: ""; position: absolute; inset: -18px 0 auto; height: 18px; background: radial-gradient(9px at 50% 0, #0000 98%, var(--ink)) 50% 0 / 24px 100% repeat-x; }
+.try h2 { color: var(--brine); } .try .sub { color: #b9c7ba; }
+.cmds { margin-top: 40px; display: grid; gap: 14px; max-width: 900px; }
+.cmd { display: flex; align-items: center; gap: 14px; background: #0f2313; border: 1.5px solid #ffffff22; border-radius: 10px; padding: 16px 16px 16px 20px; font: 400 13.5px/1.5 var(--mono); }
+.cmd .n { font: 400 22px/1 var(--display); color: var(--mustard); min-width: 22px; }
+.cmd code { background: none; padding: 0; font-size: inherit; flex: 1; overflow-x: auto; white-space: nowrap; color: #f3edd7; scrollbar-width: none; }
+.cmd .note { color: #8fa391; }
+.cmd button { font: 600 11px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; background: var(--brine); color: var(--ink); border: 0; border-radius: 6px; padding: 9px 12px; cursor: pointer; transition: background .15s; }
+.cmd button:hover { background: var(--mustard); }
+.try .fine { margin-top: 26px; font-size: 15.5px; color: #b9c7ba; max-width: 44em; } .try .fine code { background: #ffffff18; color: var(--paper); }
+
+/* writing steps */
+.rules { margin-top: 44px; display: grid; grid-template-columns: 1fr 1fr; gap: 0 40px; }
+.rule { padding: 22px 0; border-top: 2px solid var(--ink); }
+.rule h3 { font: 700 18px/1.3 var(--body); margin-bottom: 8px; }
+.rule p { font-size: 15.5px; color: var(--ink-soft); }
+.rule .yes, .rule .no { display: block; font: 400 12.5px/1.6 var(--mono); margin-top: 8px; padding-left: 22px; position: relative; }
+.rule .yes::before { content: "✓"; position: absolute; left: 0; color: var(--pickle-bright); font-weight: 700; }
+.rule .no::before { content: "✗"; position: absolute; left: 0; color: var(--tomato); font-weight: 700; } .rule .no { color: var(--ink-soft); text-decoration: line-through; text-decoration-color: #c4462d88; }
+@media (max-width: 860px) { .rules { grid-template-columns: 1fr; } }
+
+/* fine print */
+.fineprint { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; margin-top: 44px; }
+.fineprint div { border-left: 4px solid var(--mustard); padding: 4px 0 4px 22px; }
+.fineprint h3 { font: 700 17px/1.3 var(--body); margin-bottom: 6px; } .fineprint p { font-size: 15.5px; color: var(--ink-soft); }
+@media (max-width: 860px) { .fineprint { grid-template-columns: 1fr; } }
+
+footer { margin-top: 120px; border-top: 2px solid var(--ink); padding: 34px 0 60px; display: flex; flex-wrap: wrap; gap: 14px 30px; justify-content: space-between; font-size: 14.5px; color: var(--ink-soft); }
+footer a { text-underline-offset: 3px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ticket .line, .ticket .total { animation: none; opacity: 1; } .band div { animation: none; } .reveal { opacity: 1; transform: none; transition: none; } .q .bar i { transition: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <nav>
+    <a class="mark" href="/"><span>🥒</span>jevcumber</a>
+    <ul>
+      <li><a href="#demo">Demo</a></li>
+      <li><a href="#how">How it works</a></li>
+      <li><a href="#try">Try it</a></li>
+      <li><a href="https://github.com/RubyBrewsday/jevcumber">GitHub ↗</a></li>
+    </ul>
+  </nav>
+
+  <header class="hero">
+    <div>
+      <p class="eyebrow">Open source · MIT · v0.1</p>
+      <h1>Cucumber tests. Hold the <em>step definitions.</em></h1>
+      <p class="lede">Write the <code>.feature</code> file. <strong>That's the whole test.</strong> jevcumber opens a real browser and works out what each Gherkin step means on the page in front of it — no glue code, no regex, no page objects.</p>
+      <div class="cta">
+        <a class="btn primary" href="#try">Try it in two minutes</a>
+        <a class="btn ghost" href="https://github.com/RubyBrewsday/jevcumber">View on GitHub ↗</a>
+      </div>
+    </div>
+
+    <div class="stack" aria-label="A feature file and the output of running it">
+      <div class="card feature-card">
+        <div class="tab"><span>wikipedia_search.feature</span><span>THE WHOLE TEST</span></div>
+<pre><span class="kw">Feature:</span> Wikipedia search
+
+<span class="kw">Scenario:</span> Searching for bagels
+  <span class="kw">Given</span> I am at <span class="url">https://en.wikipedia.org</span>
+  <span class="kw">When</span> I search for <span class="str">"bagels"</span>
+  <span class="kw">Then</span> I see an article about bagels</pre>
+      </div>
+      <div class="ticket" role="img" aria-label="Test output: all three steps passed">
+        <div class="head">✦ ORDER UP ✦</div>
+        <div class="line"><span>$ jevcumber features/</span></div>
+        <div class="line"><span class="ok">✓</span><span>Given I am at https://en.wiki…</span></div>
+        <div class="line"><span class="ok">✓</span><span>When I search for "bagels"</span></div>
+        <div class="line"><span class="ok">✓</span><span>Then I see an article about bagels</span></div>
+        <div class="total">3 steps · 3 passed · 0 glue</div>
+      </div>
+    </div>
+  </header>
+</div>
+
+<div class="band-clip"><div class="band" aria-hidden="true"><div>
+  <span>NO STEP DEFINITIONS</span><i>✦</i><span>NO REGEX</span><i>✦</i><span>NO GLUE CODE</span><i>✦</i><span>NO PAGE OBJECTS</span><i>✦</i><span>JUST GHERKIN</span><i>✦</i>
+  <span>NO STEP DEFINITIONS</span><i>✦</i><span>NO REGEX</span><i>✦</i><span>NO GLUE CODE</span><i>✦</i><span>NO PAGE OBJECTS</span><i>✦</i><span>JUST GHERKIN</span><i>✦</i>
+  <span>NO STEP DEFINITIONS</span><i>✦</i><span>NO REGEX</span><i>✦</i><span>NO GLUE CODE</span><i>✦</i><span>NO PAGE OBJECTS</span><i>✦</i><span>JUST GHERKIN</span><i>✦</i>
+  <span>NO STEP DEFINITIONS</span><i>✦</i><span>NO REGEX</span><i>✦</i><span>NO GLUE CODE</span><i>✦</i><span>NO PAGE OBJECTS</span><i>✦</i><span>JUST GHERKIN</span><i>✦</i>
+</div></div></div>
+
+<main class="wrap">
+
+  <section id="demo" class="reveal">
+    <p class="eyebrow">Unedited, apart from fast-forwarding the typing</p>
+    <h2>Watch it order a bagel.</h2>
+    <p class="sub">A brand-new feature file, written in vim and run against the live Wikipedia. Nobody told jevcumber where the search box is, or what "an article about bagels" looks like.</p>
+    <div class="screen">
+      <div class="bar"><b></b><b></b><b></b><span>jevcumber features/wikipedia_search.feature --headed</span></div>
+      <video controls playsinline preload="metadata" poster="demo-poster.jpg">
+        <source src="demo.mp4" type="video/mp4">
+      </video>
+    </div>
+    <p class="aside">Stay for the last frame: when the run passes, the terminal's autosuggest offers to “refactor the step definitions to improve maintainability.” There aren't any.</p>
+  </section>
+
+  <section id="how" class="reveal">
+    <p class="eyebrow">How it works</p>
+    <h2>You order. Jev reads the menu.</h2>
+    <p class="sub">jevcumber is built on <a href="https://docs.typesafe.ai">Jev</a>, TypeSafe AI's fast <em>System One</em> model. Jev doesn't write code and it doesn't invent values. It answers multiple-choice questions — and jevcumber writes the choices from what is really on the page.</p>
+
+    <div class="steps">
+      <div class="card step"><h3>Code lists what's there</h3><p>Playwright opens the page. jevcumber collects its buttons, fields and links, and the literal values in your step.</p></div>
+      <div class="card step"><h3>Jev picks among them</h3><p>One request, about a second: what kind of action, which control, which value. Every answer comes back with a probability.</p></div>
+      <div class="card step"><h3>Playwright does it</h3><p>The picks become an ordinary click, fill, or assertion — and get written down so they never need asking again.</p></div>
+    </div>
+
+    <div class="menu reveal">
+      <div class="order">
+        <small>YOUR STEP</small>
+        <p>When I search for <span class="str">"bagels"</span></p>
+      </div>
+      <div>
+        <div class="q"><span class="ask">What kind of action is this?</span><span class="pick">fill</span><span class="bar"><i style="--p:99%"></i></span></div>
+        <div class="q"><span class="ask">Which control? <em>Search Wikipedia · Log in · Donate · …</em></span><span class="pick">Search Wikipedia</span><span class="bar"><i style="--p:100%"></i></span></div>
+        <div class="q"><span class="ask">Which literal is the text to type?</span><span class="pick">"bagels"</span><span class="bar"><i style="--p:100%"></i></span></div>
+        <div class="q"><span class="ask">Just type — or type and submit?</span><span class="pick">submit</span><span class="bar"><i style="--p:97%"></i></span></div>
+      </div>
+    </div>
+
+    <div class="split">
+      <div class="card panel reveal">
+        <h3>It refuses to guess.</h3>
+        <p>If Jev isn't sure, jevcumber won't click anything. The step is reported as ambiguous, with what it was torn between, so you can say what you meant.</p>
+<pre><span class="warn">?</span> When I click it <span class="dim">(ambiguous)</span>
+  <span class="dim">Jev was not confident about the element
+  (0.10 &lt; 0.6). Candidates:</span> button "Log in" (45%),
+  link "Sign up" (35%), none (20%).</pre>
+      </div>
+      <div class="card panel jar reveal">
+        <h3>Pickled for later.</h3>
+        <p>The first run saves what every step resolved to in a lockfile next to your feature. Commit it, like a <code>package-lock.json</code>.</p>
+        <p>After that, runs replay it: <strong>no API calls, no API key, no model variance.</strong> Change a step and only that step is re-resolved. Change your UI and the step heals itself — visibly, in the diff.</p>
+<pre><span class="dim">$</span> jevcumber features/ --frozen  <span class="dim"># in CI</span>
+<span class="ok">✓</span> Given I am on https://en.wikipedia.org
+<span class="ok">✓</span> When I search for "bagel"
+<span class="ok">✓</span> Then the URL should contain "/wiki/Bagel"</pre>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div class="try" id="try">
+  <div class="wrap reveal">
+    <p class="eyebrow" style="color:#b9c7ba">No sign-up needed for the first taste</p>
+    <h2>Try it in two minutes.</h2>
+    <p class="sub">The repo ships an example with its lockfile already recorded, so you can watch a replay before you get an API key. Needs Node.js 20+.</p>
+    <div class="cmds">
+      <div class="cmd"><span class="n">1</span><code>npm install -g https://github.com/RubyBrewsday/jevcumber/releases/latest/download/jevcumber.tgz</code><button>Copy</button></div>
+      <div class="cmd"><span class="n">2</span><code>jevcumber install-browser</code><button>Copy</button></div>
+      <div class="cmd"><span class="n">3</span><code>git clone https://github.com/RubyBrewsday/jevcumber &amp;&amp; cd jevcumber</code><button>Copy</button></div>
+      <div class="cmd"><span class="n">4</span><code>jevcumber examples/ --frozen --headed</code><button>Copy</button></div>
+    </div>
+    <p class="fine">To run your own features, get a key from <a href="https://docs.typesafe.ai/introduction/quickstart">TypeSafe</a>, <code>export TYPESAFE_API_KEY=…</code>, write a <code>.feature</code> file anywhere and run <code>jevcumber path/to/it</code>. The <a href="https://github.com/RubyBrewsday/jevcumber#readme">README</a> has the full CLI reference and a CI recipe.</p>
+  </div>
+</div>
+
+<main class="wrap">
+  <section class="reveal">
+    <p class="eyebrow">House rules</p>
+    <h2>Writing steps it can resolve.</h2>
+    <p class="sub">Jev selects; it never makes things up. So give it something to select.</p>
+    <div class="rules">
+      <div class="rule"><h3>Put data in quotes</h3><p>Values are picked out of your step, not invented.</p>
+        <span class="yes">When I fill in the email field with "alice@example.com"</span><span class="no">When I fill in a valid email</span></div>
+      <div class="rule"><h3>Say where to go</h3><p>A full URL, a bare domain, or a path with <code>--base-url</code>.</p>
+        <span class="yes">Given I am on https://example.com/login</span><span class="no">Given I am on the login page</span></div>
+      <div class="rule"><h3>Name controls the way the page does</h3><p>The words on the button are the best locator there is.</p>
+        <span class="yes">And I click the Log in button</span><span class="yes">And I click "Log in"</span></div>
+      <div class="rule"><h3>Two kinds of Then</h3><p>Quoted text becomes a fast, cached Playwright assertion. A described expectation is judged by Jev against the live page on every run.</p>
+        <span class="yes">Then I should see "Welcome, alice"</span><span class="yes">Then I see an article about bagels</span></div>
+    </div>
+  </section>
+
+  <section class="reveal">
+    <p class="eyebrow">The fine print, in normal-size print</p>
+    <h2>Things you should know.</h2>
+    <div class="fineprint">
+      <div><h3>What gets sent to TypeSafe</h3><p>For a step that isn't replayed from the lockfile: the step text and its literals, earlier step texts, the page's URL, title and interactive elements, and up to 8,000 characters of visible text. Never the value of a password field. Under <code>--frozen</code>, nothing leaves your machine.</p></div>
+      <div><h3>Some sites don't want robots</h3><p>Google answers a scripted search with a “prove you're not a robot” page, and jevcumber will correctly tell you your results aren't there. It makes no attempt to evade bot detection. Test your own app, or sites that allow automation.</p></div>
+      <div><h3>It's v0.1</h3><p>One action per step. Scenarios run one at a time. No iframes, uploads, drag-and-drop or multi-tab flows yet. Web UIs only.</p></div>
+      <div><h3>It's yours</h3><p>MIT licensed. Not affiliated with TypeSafe AI or the Cucumber project — just very fond of both. Issues and pull requests welcome.</p></div>
+    </div>
+  </section>
+
+  <footer>
+    <span><a class="mark" style="font-size:20px" href="/"><span>🥒</span>jevcumber</a></span>
+    <span><a href="https://github.com/RubyBrewsday/jevcumber">GitHub</a> · <a href="https://github.com/RubyBrewsday/jevcumber/releases">Releases</a> · <a href="https://github.com/RubyBrewsday/jevcumber/blob/main/LICENSE">MIT License</a> · <a href="https://docs.typesafe.ai">Jev docs</a></span>
+    <span>© 2026 Mike Poage</span>
+  </footer>
+</main>
+
+<script>
+  const seen = new IntersectionObserver((entries) => {
+    for (const entry of entries) if (entry.isIntersecting) { entry.target.classList.add('in'); seen.unobserve(entry.target); }
+  }, { threshold: 0.12 });
+  document.querySelectorAll('.reveal').forEach((el) => seen.observe(el));
+
+  document.querySelectorAll('.cmd button').forEach((button) => {
+    button.addEventListener('click', async () => {
+      await navigator.clipboard.writeText(button.previousElementSibling.textContent);
+      button.textContent = 'Copied';
+      setTimeout(() => (button.textContent = 'Copy'), 1400);
+    });
+  });
+</script>
+</body>
+</html>
