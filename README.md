@@ -19,6 +19,7 @@ Feature: Login
 ```
 
 ```bash
+npx playwright install chromium
 export TYPESAFE_API_KEY=...
 npx jevcumber features/ --base-url http://localhost:3000
 ```
@@ -46,9 +47,24 @@ Other flags: `--headed`, `--tags "@smoke and not @wip"`, `--min-confidence 0.6`.
 - `Then` steps with quoted text become fast, cached Playwright assertions. Descriptive
   expectations ("Then I see a friendly error") are judged live by Jev each run, so they
   need the API key and can't run under `--frozen`.
+- **Navigation resolves against `--base-url`.** A step like `Given I am on "/login"`
+  resolves as a URL against `--base-url`, so `"/login"` is an absolute path from the
+  host root, not relative to the current page.
+- **An empty literal is ignored.** `""` never becomes the value for a step, so a step
+  can't be used to clear a field — quote the actual value you want typed instead.
 
 If Jev isn't confident, jevcumber won't guess: the step is reported as **ambiguous**
 with the top candidates, or **undefined** if nothing on the page matches. Reword and rerun.
+
+## What is sent to TypeSafe
+
+For each step that isn't replayed from the lockfile, jevcumber sends Jev: the step's
+text and its extracted literals; the scenario name and the text of previous steps;
+the page's URL and title; the list of interactive elements on the page (role, name,
+and current value — **never** a password field's value); and up to 8 000 characters
+of the page's visible text. Literals — including a password written directly in a
+step — are also stored in the lockfile alongside the resolution. Under `--frozen`,
+nothing is sent: every step replays from the lockfile.
 
 ## Limits (v0.1)
 
@@ -61,3 +77,9 @@ npm install && npx playwright install chromium
 npm test            # unit + frozen e2e (no API key needed)
 TYPESAFE_API_KEY=... npm test   # also runs the live smoke test
 ```
+
+`npm run jevcumber -- features/ --base-url http://localhost:3000` builds first and
+runs the compiled `dist/cli.js`. Running `tsx src/cli.ts` directly does not work:
+tsx/esbuild's `keepNames` rewrites the function passed to `page.evaluate` in
+`snapshot.ts` to call a helper that doesn't exist inside the page, so it crashes on
+the first snapshot.

@@ -48,9 +48,11 @@ expanded. Filters by `@cucumber/tag-expressions`.
 
 ```ts
 type Step = { keyword: 'Given'|'When'|'Then'; text: string; table?: string[][]; docString?: string };
-type Scenario = { uri: string; feature: string; name: string; tags: string[]; steps: Step[] };
+type Scenario = { uri: string; feature: string; name: string; occurrence: number; tags: string[]; steps: Step[] };
 ```
-`And`/`But` are normalized to the preceding primary keyword.
+`And`/`But` are normalized to the preceding primary keyword. `occurrence` is a
+scenario's zero-based index among scenarios of the same name in the same
+feature file (0 when the name is unique) — see `lockfile.ts` below.
 
 ### `snapshot.ts`
 `snapshot(page) → Snapshot`.
@@ -70,6 +72,12 @@ textareas, checkboxes, radios, `[role]` widgets). Locator preference: test id �
 role+name → label → placeholder → text. Elements whose locator is not unique on
 the page get no entry rather than an ambiguous one. `text` is the page's visible
 text, truncated to 8 000 characters.
+
+Password inputs skip the role locator (some browser/Playwright combinations
+compute an accessible role of `textbox` for `input[type=password]`, which would
+otherwise let a role+name locator resolve uniquely and match a sensitive field)
+and fall through to label/placeholder/text instead; their values are never
+captured into the snapshot.
 
 ### `candidates.ts`
 `extractValues(step) → string[]`. Literal values in order of appearance:
@@ -134,6 +142,16 @@ Outcome is `{ ok: true, resolved, confidence }` or
 `kind = none`, or a required element/value answered `none`, is **undefined**.
 jevcumber never acts on a guess.
 
+#### Data sent to TypeSafe
+
+For each step that is not replayed from the lockfile, jevcumber sends Jev the
+step text and its extracted literals, the scenario name and previous step
+texts, the page URL and title, the list of interactive elements (role, name,
+current value — never a password field's value), and up to 8 000 characters of
+visible page text. Literals — including a password written in a step — are
+also stored in the lockfile. Under `--frozen` nothing is sent: every step
+replays from the lockfile.
+
 ### `executor.ts`
 `execute(page, resolved, ctx) → void` (throws on failure). Maps `LocatorSpec` to
 Playwright locators and `ResolvedStep` to actions; `navigate` resolves relative
@@ -148,8 +166,13 @@ network-idle-or-500 ms so the next snapshot sees the settled page.
 
 ```json
 { "version": 1,
-  "steps": { "<sha256(scenario name + step index + step text + table)>": { "text": "...", "resolved": { } } } }
+  "steps": { "<sha256(scenario name + occurrence among same-named scenarios in the feature + step index + step text + table + docstring)>": { "text": "...", "resolved": { } } } }
 ```
+The occurrence — a scenario's zero-based index among scenarios sharing its name
+in the same feature file, 0 when the name is unique — keeps Scenario Outline
+rows (and any other same-named scenarios) from colliding on one lockfile entry,
+since every row of an outline shares the outline's scenario name.
+
 Entries not touched during a full run of that feature are pruned. Output is
 key-sorted for stable diffs.
 
@@ -158,9 +181,14 @@ Per step: lockfile hit → validate → replay. Validation applies to action ste
 only: each locator must attach within 2 s and match exactly one element.
 Cached assertions are never pre-validated — Playwright's auto-waiting `expect`
 is the judge, so a stale assertion fails rather than heals (`--update` fixes
-it). Skipped steps still mark their lockfile entries as in use so a failing run
-does not prune them. On miss or failed validation → resolve with Jev,
-write the entry, and mark the step **healed** if an entry existed. Modes:
+it). Every step's lockfile key is marked in use at the start of the step,
+before it is resolved or replayed, so a step that fails to resolve — in
+`--update` mode or otherwise — is never mistaken for one that was never
+reached, and a failing or `--update` run never prunes an entry it failed to
+re-resolve. Skipped steps mark their lockfile entries in use the same way, so a
+failing run does not prune them either. On miss or failed validation → resolve
+with Jev, write the entry, and mark the step **healed** if an entry existed.
+Modes:
 
 - default: resolve on miss, heal on stale
 - `--frozen`: never call Jev; a miss or stale entry fails the step. `semantic`
@@ -195,9 +223,10 @@ actually needs Jev; its absence is reported on that step.
   to `ResolvedStep`, including undefined and ambiguous outcomes; `runner` mode
   logic against fake resolver/executor.
 - **E2E:** a static fixture app (login form, todo list) served locally; feature
-  files run in `--frozen` mode against a recorded lockfile, so CI needs no key.
-- **Live smoke:** the same features with `--update`, run only when
-  `TYPESAFE_API_KEY` is set.
+  files run in `--frozen` mode against a lockfile the test builds from
+  known-good resolutions, so CI needs no key.
+- **Live smoke:** the same features in default mode from an empty lockfile,
+  then replayed `--frozen`, run only when `TYPESAFE_API_KEY` is set.
 
 ## Dependencies
 
