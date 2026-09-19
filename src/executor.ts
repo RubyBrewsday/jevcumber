@@ -1,0 +1,81 @@
+import { expect, type Page } from '@playwright/test';
+import { toLocator } from './locators.js';
+import type { Assertion, LocatorSpec, ResolvedStep } from './types.js';
+
+export const SEMANTIC_THRESHOLD = 0.8;
+const ASSERT_TIMEOUT = 5000;
+
+export interface ExecuteContext {
+  baseUrl: string;
+  stepText: string;
+  /** Returns P(page satisfies stepText). Absent in --frozen mode. */
+  semantic?: (stepText: string) => Promise<number>;
+}
+
+/** Locators the runner should validate before replaying a cached step. Assertions are left to expect's auto-wait. */
+export function actionLocators(resolved: ResolvedStep): LocatorSpec[] {
+  if (resolved.kind === 'navigate' || resolved.kind === 'assert') return [];
+  return resolved.locator ? [resolved.locator] : [];
+}
+
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Let the page react to the action so the next snapshot sees its settled state.
+async function settle(page: Page): Promise<void> {
+  await page.waitForLoadState('networkidle', { timeout: 500 }).catch(() => {});
+}
+
+async function check(page: Page, assertion: Assertion, ctx: ExecuteContext): Promise<void> {
+  const timeout = ASSERT_TIMEOUT;
+  switch (assertion.form) {
+    case 'text_visible':
+      return expect(page.getByText(assertion.value).first()).toBeVisible({ timeout });
+    case 'text_not_visible':
+      return expect(page.getByText(assertion.value).first()).toBeHidden({ timeout });
+    case 'url_contains':
+      return expect(page).toHaveURL(new RegExp(escapeRegExp(assertion.value)), { timeout });
+    case 'element_visible':
+      return expect(toLocator(page, assertion.locator)).toBeVisible({ timeout });
+    case 'element_has_value':
+      return expect(toLocator(page, assertion.locator)).toHaveValue(assertion.value, { timeout });
+    case 'semantic': {
+      if (!ctx.semantic) {
+        throw new Error('This step is a descriptive expectation that only Jev can judge, so it cannot run with --frozen.');
+      }
+      const probability = await ctx.semantic(ctx.stepText);
+      if (probability < SEMANTIC_THRESHOLD) {
+        throw new Error(`Jev judged the expectation unmet (p=${probability.toFixed(2)}, needs ≥ ${SEMANTIC_THRESHOLD}).`);
+      }
+    }
+  }
+}
+
+export async function execute(page: Page, resolved: ResolvedStep, ctx: ExecuteContext): Promise<void> {
+  switch (resolved.kind) {
+    case 'navigate':
+      await page.goto(new URL(resolved.value, ctx.baseUrl).href);
+      break;
+    case 'click':
+      await toLocator(page, resolved.locator).click();
+      break;
+    case 'check':
+      await toLocator(page, resolved.locator).check();
+      break;
+    case 'uncheck':
+      await toLocator(page, resolved.locator).uncheck();
+      break;
+    case 'fill':
+      await toLocator(page, resolved.locator).fill(resolved.value);
+      break;
+    case 'select':
+      await toLocator(page, resolved.locator).selectOption({ label: resolved.value });
+      break;
+    case 'press':
+      if (resolved.locator) await toLocator(page, resolved.locator).press(resolved.key);
+      else await page.keyboard.press(resolved.key);
+      break;
+    case 'assert':
+      return check(page, resolved.assertion, ctx);
+  }
+  await settle(page);
+}
