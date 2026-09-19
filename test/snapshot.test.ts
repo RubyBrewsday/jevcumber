@@ -73,4 +73,33 @@ describe('snapshot', () => {
     expect((await snapshot(long)).text.length).toBe(8000);
     await long.close();
   });
+
+  it('retries when a navigation destroys the page context mid-snapshot', async () => {
+    let failures = 2;
+    const flaky = new Proxy(page, {
+      get(target, property, receiver) {
+        if (property === 'evaluate' && failures > 0) {
+          return async () => {
+            failures--;
+            throw new Error('page.evaluate: Execution context was destroyed, most likely because of a navigation');
+          };
+        }
+        const value = Reflect.get(target, property, receiver);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    expect((await snapshot(flaky)).title).toBe('Fixture');
+    expect(failures).toBe(0);
+  });
+
+  it('does not retry other errors', async () => {
+    const broken = new Proxy(page, {
+      get(target, property, receiver) {
+        if (property === 'evaluate') return async () => { throw new Error('boom'); };
+        const value = Reflect.get(target, property, receiver);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    await expect(snapshot(broken)).rejects.toThrow('boom');
+  });
 });

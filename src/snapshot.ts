@@ -120,7 +120,23 @@ function specsFor(raw: RawElement): LocatorSpec[] {
   return specs;
 }
 
+const NAVIGATION_RETRIES = 5;
+
+// An action such as submitting a search can still be navigating when the next step starts:
+// wait for the document, and start over if a navigation pulls the page out from under us.
 export async function snapshot(page: Page): Promise<Snapshot> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await page.waitForLoadState('domcontentloaded');
+      return await snapshotOnce(page);
+    } catch (error) {
+      const interrupted = error instanceof Error && /context was destroyed|navigat/i.test(error.message);
+      if (!interrupted || attempt >= NAVIGATION_RETRIES) throw error;
+    }
+  }
+}
+
+async function snapshotOnce(page: Page): Promise<Snapshot> {
   const raw = await page.evaluate(collect);
 
   const located = await Promise.all(

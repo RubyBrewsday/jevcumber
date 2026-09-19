@@ -55,6 +55,12 @@ describe('execute: actions', () => {
   });
 });
 
+  it('presses Enter after filling when the step is marked submit', async () => {
+    await execute(page, { kind: 'fill', locator: role('textbox', 'Search'), value: 'bagels', submit: true }, ctx);
+    expect(await page.locator('#out').textContent()).toBe('Searched');
+    expect(await page.getByLabel('Search').inputValue()).toBe('bagels');
+  });
+
 describe('execute: assertions', () => {
   it('passes and fails text_visible', async () => {
     await execute(page, { kind: 'assert', assertion: { form: 'text_visible', value: 'Email' } }, ctx);

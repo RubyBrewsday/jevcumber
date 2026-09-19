@@ -51,7 +51,7 @@ describe('resolve: request shape', () => {
     });
     const { questions } = requests[0];
     expect(Object.keys(questions).sort()).toEqual(
-      ['assertion', 'element', 'expected_text', 'input_text', 'key', 'kind', 'target_url'],
+      ['after_typing', 'assertion', 'element', 'expected_text', 'input_text', 'key', 'kind', 'target_url'],
     );
     expect(Object.keys(questions.kind.criteria)).toEqual(
       ['navigate', 'click', 'fill', 'select', 'check', 'uncheck', 'press', 'assert', 'none'],
@@ -62,10 +62,65 @@ describe('resolve: request shape', () => {
     }
   });
 
-  it('omits the element and value questions when there is nothing to choose from', async () => {
+  it('omits every question whose answer could not be acted on when there is nothing to choose from', async () => {
     const { client, requests } = fakeClient({ kind: answer('none') });
     await resolve(input(when('something'), client, [], { ...SNAP, elements: [] }));
-    expect(Object.keys(requests[0].questions).sort()).toEqual(['assertion', 'key', 'kind']);
+    expect(Object.keys(requests[0].questions).sort()).toEqual(['key', 'kind']);
+  });
+});
+
+describe('resolve: only feasible assertion forms are offered', () => {
+  const forms = (request: any) => Object.keys(request.questions.assertion.criteria);
+
+  it('offers every form when the step has literals and the page has elements', async () => {
+    const { client, requests } = fakeClient({ kind: answer('none') });
+    await resolve(input(when('x'), client, ['lit']));
+    expect(forms(requests[0])).toEqual(
+      ['text_visible', 'text_not_visible', 'element_visible', 'element_has_value', 'url_contains', 'semantic'],
+    );
+  });
+
+  it('drops forms that need a literal when the step has none', async () => {
+    const { client, requests } = fakeClient({ kind: answer('none') });
+    await resolve(input(when('I see a list of bagels'), client, []));
+    expect(forms(requests[0])).toEqual(['element_visible', 'semantic']);
+  });
+
+  it('drops forms that need an element when the page has none', async () => {
+    const { client, requests } = fakeClient({ kind: answer('none') });
+    await resolve(input(when('x'), client, ['lit'], { ...SNAP, elements: [] }));
+    expect(forms(requests[0])).toEqual(['text_visible', 'text_not_visible', 'url_contains', 'semantic']);
+  });
+
+  it('resolves to semantic without asking when it is the only feasible form', async () => {
+    const { client, requests } = fakeClient({ kind: answer('assert', 0.9) });
+    const outcome = await resolve(input(when('the page looks calm'), client, [], { ...SNAP, elements: [] }));
+    expect(requests[0].questions.assertion).toBeUndefined();
+    expect(outcome).toEqual({ ok: true, resolved: { kind: 'assert', assertion: { form: 'semantic' } }, confidence: 0.9 });
+  });
+});
+
+describe('resolve: typing that implies submitting', () => {
+  const fillAnswers = { kind: answer('fill'), element: answer('e1'), input_text: answer('v1') };
+
+  it('marks a fill as submit when the step implies pressing Enter afterwards', async () => {
+    const { client } = fakeClient({ ...fillAnswers, after_typing: answer('submit', 0.8) });
+    const outcome = await resolve(input(when('I search for "bagels"'), client, ['bagels']));
+    expect(outcome).toEqual({
+      ok: true,
+      resolved: { kind: 'fill', locator: SNAP.elements[0].locator, value: 'bagels', submit: true },
+      confidence: 0.8,
+    });
+  });
+
+  it('leaves a plain fill unmarked, and does not consult after_typing for select', async () => {
+    const stay = await resolve(input(when('x'), fakeClient({ ...fillAnswers, after_typing: answer('stay') }).client, ['a']));
+    expect((stay as any).resolved).toEqual({ kind: 'fill', locator: SNAP.elements[0].locator, value: 'a' });
+
+    const select = await resolve(
+      input(when('x'), fakeClient({ ...fillAnswers, kind: answer('select'), after_typing: answer('submit', 0.1) }).client, ['a']),
+    );
+    expect(select).toMatchObject({ ok: true, resolved: { kind: 'select', value: 'a' }, confidence: 0.95 });
   });
 });
 

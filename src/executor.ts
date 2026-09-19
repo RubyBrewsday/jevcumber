@@ -101,9 +101,12 @@ export async function execute(page: Page, resolved: ResolvedStep, ctx: ExecuteCo
     case 'uncheck':
       await toLocator(page, resolved.locator).uncheck();
       break;
-    case 'fill':
-      await toLocator(page, resolved.locator).fill(resolved.value);
+    case 'fill': {
+      const field = toLocator(page, resolved.locator);
+      await field.fill(resolved.value);
+      if (resolved.submit) await field.press('Enter');
       break;
+    }
     case 'select':
       await select(toLocator(page, resolved.locator), resolved.value);
       break;

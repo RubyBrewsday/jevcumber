@@ -49,7 +49,8 @@ const ASSERTION = {
     examples: ['I should not see "Error"'],
   },
   element_visible: {
-    what: 'The step expects a control from `page.elements` (a field, button, link, checkbox) to be present or visible, whatever it contains. The control may be named in quotes.',
+    what: 'The step expects one specific control from `page.elements` (a field, button, link, checkbox) to be present or visible, whatever it contains. The control may be named in quotes.',
+    not_for: 'Content the step describes rather than names: results, lists, messages, images, sections. That is semantic.',
     examples: ['the "Save" button is shown', 'there is a search field', 'the "Remember me" checkbox is present'],
   },
   element_has_value: {
@@ -61,8 +62,8 @@ const ASSERTION = {
     examples: ['the URL should contain "/todos"', 'I am redirected to "/login"'],
   },
   semantic: {
-    what: 'The expectation is descriptive rather than literal and cannot be reduced to any of the other forms.',
-    examples: ['I see a friendly error', 'the list is sorted by date'],
+    what: 'The step describes what the page should show rather than quoting text or naming one control, so it cannot be reduced to any of the other forms.',
+    examples: ['I see a friendly error', 'the list is sorted by date', 'search results about cats are shown', 'there are several products'],
   },
 };
 
@@ -79,6 +80,27 @@ const KEY = {
   ArrowRight: 'The right arrow key.',
   none: 'The step does not name any of these keys.',
 } as const;
+
+const AFTER_TYPING = {
+  submit: {
+    what: 'The step implies the typed text is then submitted, as a user would by pressing Enter.',
+    examples: ['I search for "bagels"', 'I look up "order 1234"', 'I submit "hello" in the chat box'],
+  },
+  stay: {
+    what: 'The step only asks for text to be entered into a field; submitting, if any, is a separate step.',
+    examples: ['I fill in the email field with "a@b.c"', 'I type "secret" into the password box', 'I enter "Paris" as the city'],
+  },
+};
+
+// What each assertion form needs in order to be executable; code never offers Jev a form it could not act on.
+const ASSERTION_NEEDS: Record<keyof typeof ASSERTION, { element?: true; value?: true }> = {
+  text_visible: { value: true },
+  text_not_visible: { value: true },
+  element_visible: { element: true },
+  element_has_value: { element: true, value: true },
+  url_contains: { value: true },
+  semantic: {},
+};
 
 type ValueQuestionId = 'target_url' | 'input_text' | 'expected_text';
 
@@ -141,12 +163,24 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
       'A test runner is executing the Gherkin step in `step.text` against the web page in `page`. Which single browser interaction or check does the step call for?',
       KIND,
     ),
-    assertion: choice(
-      'Assume the Gherkin step in `step.text` is a check on the web page in `page`. Which form of check expresses what it expects?',
-      ASSERTION,
-    ),
     key: choice('Assume the Gherkin step in `step.text` asks for a keyboard key to be pressed. Which key?', KEY),
   };
+  const feasibleForms = (Object.keys(ASSERTION) as (keyof typeof ASSERTION)[]).filter(
+    (form) => (!ASSERTION_NEEDS[form].element || elements.length > 0) && (!ASSERTION_NEEDS[form].value || values.length > 0),
+  );
+  // With a single feasible form (always `semantic`) there is nothing to ask.
+  if (feasibleForms.length > 1) {
+    questions.assertion = choice(
+      'Assume the Gherkin step in `step.text` is a check on the web page in `page`. Which form of check expresses what it expects?',
+      Object.fromEntries(feasibleForms.map((form) => [form, ASSERTION[form]])),
+    );
+  }
+  if (elements.length > 0 && values.length > 0) {
+    questions.after_typing = choice(
+      'Assume the Gherkin step in `step.text` asks for text to be typed into a field. Once the text is typed, does the step imply submitting it?',
+      AFTER_TYPING,
+    );
+  }
   if (elements.length > 0) {
     questions.element = choice(
       'Which element of `page.elements` is the Gherkin step in `step.text` acting on or checking? Match on the element\'s role and name as a user would describe it.',
@@ -220,7 +254,10 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
       if (!element) return undefinedStep(NO_ELEMENT);
       const value = pickValue('input_text');
       if (value === undefined) return undefinedStep(NO_VALUE);
-      resolved = { kind, locator: element.locator, value };
+      resolved =
+        kind === 'fill' && pick('after_typing') === 'submit'
+          ? { kind, locator: element.locator, value, submit: true }
+          : { kind, locator: element.locator, value };
       break;
     }
     case 'press': {

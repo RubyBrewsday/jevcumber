@@ -107,6 +107,13 @@ Questions, all asked together; code consumes only those relevant to `kind`:
 | `assertion` | Choice | `text_visible`, `text_not_visible`, `element_visible`, `element_has_value`, `url_contains`, `semantic` |
 | `key` | Choice | `Enter`, `Tab`, `Escape`, `Space`, `Backspace`, `Delete`, `ArrowUp`, `ArrowDown`, `ArrowLeft`, `ArrowRight`, `none` |
 
+Amendments from live use (2026-09-18): the single `value` question became three purpose-specific ones
+(`target_url`, `input_text`, `expected_text`); `after_typing` (`submit` | `stay`) decides whether a `fill`
+also presses Enter (`{ kind: 'fill', …, submit: true }`); and the `assertion` question only offers forms
+the step could execute — forms needing a literal are dropped when the step has none, forms needing an
+element when the page has none, and the question is skipped when only `semantic` remains. `snapshot`
+waits for `domcontentloaded` and retries when a navigation interrupts it.
+
 The `element` and `value` questions are omitted when the page has no
 interactive elements or the step has no literals; both then count as `none`.
 

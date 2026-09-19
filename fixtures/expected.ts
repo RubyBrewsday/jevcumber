@@ -27,4 +27,8 @@ export const RESOLVED: Record<string, ResolvedStep> = {
   'I click "Log in"': { kind: 'click', locator: logIn },
   'I should see "Welcome, bob"': sees('Welcome, bob'),
   'the "New todo" field should be visible': { kind: 'assert', assertion: { form: 'element_visible', locator: newTodo } },
+  'I fill in "Email" with "dana@example.com"': { kind: 'fill', locator: email, value: 'dana@example.com' },
+  'I submit "Feed the cat" as a new todo': { kind: 'fill', locator: newTodo, value: 'Feed the cat', submit: true },
+  'I should see "Feed the cat"': sees('Feed the cat'),
+  'I see a greeting for dana': { kind: 'assert', assertion: { form: 'semantic' } },
 };

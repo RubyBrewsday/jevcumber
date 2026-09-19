@@ -49,7 +49,8 @@ export type Assertion =
 export type ResolvedStep =
   | { kind: 'navigate'; value: string }
   | { kind: 'click' | 'check' | 'uncheck'; locator: LocatorSpec }
-  | { kind: 'fill' | 'select'; locator: LocatorSpec; value: string }
+  | { kind: 'fill'; locator: LocatorSpec; value: string; submit?: true }
+  | { kind: 'select'; locator: LocatorSpec; value: string }
   | { kind: 'press'; key: string; locator?: LocatorSpec }
   | { kind: 'assert'; assertion: Assertion };
 

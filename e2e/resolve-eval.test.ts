@@ -6,10 +6,10 @@ import { RESOLVED } from '../fixtures/expected.js';
 import { extractValues } from '../src/candidates.js';
 import { execute } from '../src/executor.js';
 import { parseFeature } from '../src/gherkin.js';
-import { createClient, resolve, type JevClient } from '../src/resolver.js';
+import { createClient, resolve, semanticCheck, type JevClient } from '../src/resolver.js';
 import { snapshot } from '../src/snapshot.js';
 
-const FEATURE = 'fixtures/features/login.feature';
+const FEATURES = ['fixtures/features/login.feature', 'fixtures/eval/live-only.feature'];
 
 // Calls the real Jev API: asks Jev about every fixture step on the page state that step really sees
 // (the known-good action is executed afterwards, so one wrong answer cannot derail later steps),
@@ -39,7 +39,8 @@ describe.skipIf(!process.env.TYPESAFE_API_KEY)('Jev resolves the fixture steps t
 
     const lines: string[] = [];
     let wrong = 0;
-    for (const scenario of parseFeature(readFileSync(FEATURE, 'utf8'), FEATURE)) {
+    const scenarios = FEATURES.flatMap((file) => parseFeature(readFileSync(file, 'utf8'), file));
+    for (const scenario of scenarios) {
       const context = await browser.newContext();
       const page = await context.newPage();
       lines.push(`\nScenario: ${scenario.name}`);
@@ -70,7 +71,11 @@ describe.skipIf(!process.env.TYPESAFE_API_KEY)('Jev resolves the fixture steps t
             .join(', ');
           lines.push(`       ${id.padEnd(16)} conf ${answer.confidence.toFixed(2)}  ${top}`);
         }
-        await execute(page, expected, { baseUrl: server.url, stepText: step.text });
+        await execute(page, expected, {
+          baseUrl: server.url,
+          stepText: step.text,
+          semantic: async (text) => semanticCheck(real, text, await snapshot(page)),
+        });
       }
       await context.close();
     }

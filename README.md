@@ -55,6 +55,11 @@ Other flags: `--headed`, `--tags "@smoke and not @wip"`, `--min-confidence 0.6`.
 - **Paths resolve against `--base-url`.** `"/login"` is an absolute path from the base URL's
   host root, not relative to the current page. Without `--base-url` a path step fails and tells
   you so. A bare domain gets `https://`; `localhost` and IP addresses get `http://`.
+- **"Search for", "submit", "look up" type and press Enter.** `When I search for "bagels"` fills the
+  field and submits it; `When I fill in the search box with "bagels"` only types.
+- **Some sites block automated browsers.** Google, for one, answers a scripted search with a
+  "prove you're not a robot" page, and jevcumber will (correctly) report that your results aren't
+  there. Test your own app, or sites that permit automation.
 - **An empty literal is ignored.** `""` never becomes the value for a step, so a step
   can't be used to clear a field — quote the actual value you want typed instead.
 
