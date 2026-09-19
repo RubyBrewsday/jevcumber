@@ -1,0 +1,159 @@
+import { chromium, type Page } from '@playwright/test';
+import { extractValues } from './candidates.js';
+import { actionLocators, execute } from './executor.js';
+import { loadFeatures } from './gherkin.js';
+import { toLocator } from './locators.js';
+import { Lockfile, lockPathFor, stepKey } from './lockfile.js';
+import { createClient, resolve, semanticCheck, type JevClient } from './resolver.js';
+import { snapshot } from './snapshot.js';
+import type { Mode, ResolveOutcome, ResolvedStep, Scenario, ScenarioResult, Step, StepResult } from './types.js';
+
+const VALIDATE_TIMEOUT = 2000;
+
+export interface ScenarioDeps {
+  mode: Mode;
+  lock: Lockfile;
+  resolve(step: Step, previousSteps: string[]): Promise<ResolveOutcome>;
+  isValid(resolved: ResolvedStep): Promise<boolean>;
+  execute(resolved: ResolvedStep, step: Step): Promise<void>;
+  onStep?(result: StepResult): void;
+}
+
+const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+
+export async function runScenario(scenario: Scenario, deps: ScenarioDeps): Promise<StepResult[]> {
+  const results: StepResult[] = [];
+  let skipping = false;
+
+  const runStep = async (step: Step, index: number): Promise<StepResult> => {
+    const key = stepKey(scenario, index);
+    if (skipping) {
+      deps.lock.touch(key); // a failing run must not prune entries it never reached
+      return { step, status: 'skipped' };
+    }
+
+    const cached = deps.mode === 'update' ? undefined : deps.lock.get(key);
+    let resolved: ResolvedStep;
+    let healed = false;
+
+    if (cached && (await deps.isValid(cached))) {
+      resolved = cached;
+    } else if (deps.mode === 'frozen') {
+      const detail = cached
+        ? 'The lockfile entry for this step is stale: its element is no longer on the page. Run without --frozen to heal it.'
+        : 'No lockfile entry for this step. Run without --frozen to resolve it with Jev.';
+      return { step, status: 'failed', detail };
+    } else {
+      let outcome: ResolveOutcome;
+      try {
+        outcome = await deps.resolve(step, scenario.steps.slice(0, index).map((s) => s.text));
+      } catch (error) {
+        return { step, status: 'failed', detail: message(error) };
+      }
+      if (!outcome.ok) return { step, status: outcome.reason, detail: outcome.detail };
+      resolved = outcome.resolved;
+      deps.lock.set(key, step.text, resolved);
+      healed = cached !== undefined;
+    }
+
+    try {
+      await deps.execute(resolved, step);
+    } catch (error) {
+      return { step, status: 'failed', detail: message(error) };
+    }
+    return { step, status: healed ? 'healed' : 'passed' };
+  };
+
+  for (const [index, step] of scenario.steps.entries()) {
+    const result = await runStep(step, index);
+    if (result.status !== 'passed' && result.status !== 'healed') skipping = true;
+    results.push(result);
+    deps.onStep?.(result);
+  }
+  return results;
+}
+
+export interface Reporter {
+  scenarioStart(scenario: Scenario): void;
+  step(result: StepResult): void;
+  end(results: ScenarioResult[]): void;
+}
+
+export interface RunOptions {
+  paths: string[];
+  baseUrl: string;
+  mode: Mode;
+  headed: boolean;
+  minConfidence: number;
+  tags?: string;
+  reporter: Reporter;
+}
+
+async function isValid(page: Page, resolved: ResolvedStep): Promise<boolean> {
+  for (const spec of actionLocators(resolved)) {
+    const locator = toLocator(page, spec);
+    await locator.first().waitFor({ state: 'attached', timeout: VALIDATE_TIMEOUT }).catch(() => {});
+    if ((await locator.count()) !== 1) return false;
+  }
+  return true;
+}
+
+export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
+  const scenarios = loadFeatures(options.paths, options.tags);
+  const frozen = options.mode === 'frozen';
+
+  let client: JevClient | undefined;
+  const getClient = () => (client ??= createClient());
+
+  const locks = new Map<string, Lockfile>();
+  const lockFor = (uri: string) => {
+    if (!locks.has(uri)) locks.set(uri, Lockfile.load(lockPathFor(uri)));
+    return locks.get(uri)!;
+  };
+
+  const results: ScenarioResult[] = [];
+  const browser = await chromium.launch({ headless: !options.headed });
+  try {
+    for (const scenario of scenarios) {
+      options.reporter.scenarioStart(scenario);
+      const context = await browser.newContext();
+      const page = await context.newPage();
+      try {
+        const steps = await runScenario(scenario, {
+          mode: options.mode,
+          lock: lockFor(scenario.uri),
+          resolve: async (step, previousSteps) =>
+            resolve({
+              step,
+              scenarioName: scenario.name,
+              previousSteps,
+              snapshot: await snapshot(page),
+              values: extractValues(step),
+              client: getClient(),
+              minConfidence: options.minConfidence,
+            }),
+          isValid: (resolved) => isValid(page, resolved),
+          execute: (resolved, step) =>
+            execute(page, resolved, {
+              baseUrl: options.baseUrl,
+              stepText: step.text,
+              semantic: frozen ? undefined : async (text) => semanticCheck(getClient(), text, await snapshot(page)),
+            }),
+          onStep: (result) => options.reporter.step(result),
+        });
+        results.push({ scenario, steps });
+      } finally {
+        await context.close();
+      }
+    }
+  } finally {
+    await browser.close();
+  }
+
+  if (!frozen) {
+    // Prune only when every scenario of the feature ran, i.e. no tag filter.
+    for (const lock of locks.values()) lock.save(options.tags === undefined);
+  }
+  options.reporter.end(results);
+  return results;
+}
