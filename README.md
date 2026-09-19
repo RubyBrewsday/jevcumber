@@ -2,6 +2,7 @@
 
 **[jevcumber.dev](https://jevcumber.dev)** — site and demo video
 
+[![npm](https://img.shields.io/npm/v/jevcumber.svg)](https://www.npmjs.com/package/jevcumber)
 [![CI](https://github.com/RubyBrewsday/jevcumber/actions/workflows/ci.yml/badge.svg)](https://github.com/RubyBrewsday/jevcumber/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -72,7 +73,7 @@ The first run records what each step resolved to in `<name>.feature.lock.json`, 
 Requires Node.js 20+.
 
 ```bash
-npm install -g https://github.com/RubyBrewsday/jevcumber/releases/latest/download/jevcumber.tgz
+npm install -g jevcumber
 jevcumber install-browser      # downloads the Chromium build jevcumber drives
 ```
 
@@ -179,7 +180,7 @@ anywhere.
 ```yaml
 - uses: actions/setup-node@v4
   with: { node-version: 20 }
-- run: npm install -g https://github.com/RubyBrewsday/jevcumber/releases/latest/download/jevcumber.tgz
+- run: npm install -g jevcumber
 - run: jevcumber install-browser --with-deps
 - run: jevcumber features/ --frozen --base-url http://localhost:3000
 ```
