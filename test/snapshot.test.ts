@@ -17,6 +17,7 @@ const HTML = `
   <button disabled>Disabled one</button>
   <button style="display:none">Hidden one</button>
   <a href="/help">Need help?</a>
+  <label>Photo <input type="file"></label>
 </form>`;
 
 let browser: Browser;
@@ -45,6 +46,8 @@ describe('snapshot', () => {
     expect(byName['Remember me']).toMatchObject({ role: 'checkbox', value: 'checked' });
     expect(byName['Country']).toMatchObject({ role: 'combobox', value: 'France' });
     expect(byName['Search…'].locator).toMatchObject({ by: 'role' });
+    expect(byName['Photo']).toMatchObject({ role: 'file' });
+    expect(byName['Photo'].value).toBeUndefined();
   });
 
   it('falls through to the label locator for password inputs and never exposes their value', async () => {

@@ -59,6 +59,9 @@ export type ResolvedStep =
   | { kind: 'fill'; locator: LocatorSpec; value: string; submit?: true }
   | { kind: 'select'; locator: LocatorSpec; value: string }
   | { kind: 'press'; key: string; locator?: LocatorSpec }
+  | { kind: 'hover' | 'clear' | 'scroll'; locator: LocatorSpec }
+  | { kind: 'upload'; locator: LocatorSpec; value: string }
+  | { kind: 'wait'; text?: string; seconds?: number }
   | { kind: 'assert'; assertion: Assertion };
 
 export type ResolveOutcome =

@@ -1,4 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { chromium, type Browser, type Page } from '@playwright/test';
 import { actionLocators, execute, navigationUrl } from '../src/executor.js';
 import type { LocatorSpec } from '../src/types.js';
@@ -9,6 +12,9 @@ const HTML = `
 <select aria-label="Country"><option>UK</option><option>France</option><option value="fr">Republique</option></select>
 <button onclick="document.getElementById('out').textContent = 'Clicked!'">Go</button>
 <input aria-label="Search" onkeydown="if (event.key === 'Enter') document.getElementById('out').textContent = 'Searched'">
+<input type="file" aria-label="Photo">
+<div id="far" style="margin-top:3000px">Far away</div>
+<button onmouseover="document.getElementById('out').textContent='Hovered'">Hover me</button>
 <p id="out"></p>
 <p style="display:none">Secret</p>`;
 
@@ -59,6 +65,37 @@ describe('execute: actions', () => {
     await execute(page, { kind: 'fill', locator: role('textbox', 'Search'), value: 'bagels', submit: true }, ctx);
     expect(await page.locator('#out').textContent()).toBe('Searched');
     expect(await page.getByLabel('Search').inputValue()).toBe('bagels');
+  });
+
+  it('hovers, clears, scrolls, uploads, and waits', async () => {
+    await execute(page, { kind: 'hover', locator: role('button', 'Hover me') }, ctx);
+    expect(await page.locator('#out').textContent()).toBe('Hovered');
+
+    await page.getByLabel('Email').fill('x');
+    await execute(page, { kind: 'clear', locator: role('textbox', 'Email') }, ctx);
+    expect(await page.getByLabel('Email').inputValue()).toBe('');
+
+    await execute(page, { kind: 'scroll', locator: { by: 'text', value: 'Far away' } }, ctx);
+    expect(await page.locator('#far').evaluate((el) => el.getBoundingClientRect().top < window.innerHeight)).toBe(true);
+
+    const dir = mkdtempSync(join(tmpdir(), 'jevcumber-upload-'));
+    writeFileSync(join(dir, 'photo.png'), 'not really a png');
+    await execute(page, { kind: 'upload', locator: { by: 'label', value: 'Photo' }, value: 'photo.png' }, { ...ctx, featureDir: dir });
+    expect(await page.getByLabel('Photo').evaluate((el) => (el as HTMLInputElement).files?.[0]?.name)).toBe('photo.png');
+
+    const started = Date.now();
+    await execute(page, { kind: 'wait', seconds: 1 }, ctx);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(900);
+    await execute(page, { kind: 'wait' }, ctx);
+    setTimeout(() => page.evaluate(() => (document.getElementById('out')!.textContent = 'Later')), 300);
+    await execute(page, { kind: 'wait', text: 'Later' }, ctx);
+  });
+
+  it('selects by index when no label or value matches, and treats fill on a <select> as select', async () => {
+    await execute(page, { kind: 'select', locator: role('combobox', 'Country'), value: '2' }, ctx);
+    expect(await page.getByRole('combobox').inputValue()).toBe('fr');
+    await execute(page, { kind: 'fill', locator: role('combobox', 'Country'), value: 'UK' }, ctx);
+    expect(await page.getByRole('combobox').inputValue()).toBe('UK');
   });
 
 describe('execute: assertions', () => {
@@ -150,6 +187,8 @@ describe('actionLocators', () => {
     expect(actionLocators({ kind: 'press', key: 'Enter' })).toEqual([]);
     expect(actionLocators({ kind: 'navigate', value: '/' })).toEqual([]);
     expect(actionLocators({ kind: 'assert', assertion: { form: 'element_visible', locator: role('button', 'Go') } })).toEqual([]);
+    expect(actionLocators({ kind: 'hover', locator: role('button', 'Go') })).toEqual([role('button', 'Go')]);
+    expect(actionLocators({ kind: 'wait' })).toEqual([]);
   });
 });
 

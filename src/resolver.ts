@@ -44,9 +44,16 @@ const KIND = {
   check: 'Turn a checkbox, radio button, or switch on.',
   uncheck: 'Turn a checkbox or switch off.',
   press: 'Press a single keyboard key such as Enter, Tab, or Escape.',
+  hover: 'Move the mouse over an element without clicking, e.g. to reveal a tooltip or menu.',
+  clear: 'Empty an input field of whatever it contains.',
+  upload: 'Attach a file to a file input; the step names the file, e.g. "I upload \"photo.png\"".',
+  scroll: 'Scroll an element into view.',
+  wait: 'Pause until something appears, until the page settles, or for a number of seconds, e.g. "I wait for \"Done\" to appear", "I wait 3 seconds", "I wait for the page to load".',
   assert: 'Check that something is true of the page without interacting with it. Typical of Then steps: "I should see…", "the field contains…", "the URL is…".',
   none: 'The step describes nothing a test runner could do or check in a web browser.',
 } as const;
+
+const MAX_WAIT_SECONDS = 30;
 
 const ASSERTION = {
   text_visible: {
@@ -274,6 +281,32 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
         kind === 'fill' && pick('after_typing') === 'submit'
           ? { kind, locator: element.locator, value, submit: true }
           : { kind, locator: element.locator, value };
+      break;
+    }
+    case 'hover':
+    case 'clear':
+    case 'scroll': {
+      const element = pickElement();
+      if (!element) return undefinedStep(NO_ELEMENT);
+      resolved = { kind, locator: element.locator };
+      break;
+    }
+    case 'upload': {
+      const element = pickElement();
+      if (!element) return undefinedStep(NO_ELEMENT);
+      const value = pickValue('input_text');
+      if (value === undefined) return undefinedStep(NO_VALUE);
+      resolved = { kind, locator: element.locator, value };
+      break;
+    }
+    case 'wait': {
+      const seconds = values.map(Number).find((n) => Number.isFinite(n) && n > 0);
+      if (seconds !== undefined) {
+        resolved = { kind, seconds: Math.min(seconds, MAX_WAIT_SECONDS) };
+        break;
+      }
+      const text = values.length > 0 ? pickValue('expected_text') : undefined;
+      resolved = text === undefined ? { kind } : { kind, text };
       break;
     }
     case 'press': {

@@ -55,7 +55,7 @@ describe('resolve: request shape', () => {
       ['after_typing', 'assertion', 'element', 'expected_text', 'input_text', 'key', 'kind', 'target_url'],
     );
     expect(Object.keys(questions.kind.criteria)).toEqual(
-      ['navigate', 'click', 'fill', 'select', 'check', 'uncheck', 'press', 'assert', 'none'],
+      ['navigate', 'click', 'fill', 'select', 'check', 'uncheck', 'press', 'hover', 'clear', 'upload', 'scroll', 'wait', 'assert', 'none'],
     );
     expect(Object.keys(questions.element.criteria)).toEqual(['e1', 'e2', 'none']);
     for (const id of ['target_url', 'input_text', 'expected_text']) {
@@ -141,10 +141,22 @@ describe('resolve: mapping answers to steps', () => {
       ['a@b.c'], { kind: 'assert', assertion: { form: 'element_has_value', locator: SNAP.elements[0].locator, value: 'a@b.c' } }],
     ['assert semantic', { kind: answer('assert'), assertion: answer('semantic') }, [],
       { kind: 'assert', assertion: { form: 'semantic' } }],
+    ['hover', { kind: answer('hover'), element: answer('e2') }, [], { kind: 'hover', locator: SNAP.elements[1].locator }],
+    ['clear', { kind: answer('clear'), element: answer('e1') }, [], { kind: 'clear', locator: SNAP.elements[0].locator }],
+    ['scroll', { kind: answer('scroll'), element: answer('e2') }, [], { kind: 'scroll', locator: SNAP.elements[1].locator }],
+    ['upload', { kind: answer('upload'), element: answer('e1'), input_text: answer('v1') }, ['photo.png'], { kind: 'upload', locator: SNAP.elements[0].locator, value: 'photo.png' }],
+    ['wait for text', { kind: answer('wait'), expected_text: answer('v1') }, ['Done'], { kind: 'wait', text: 'Done' }],
+    ['wait seconds', { kind: answer('wait'), expected_text: answer('none') }, ['3'], { kind: 'wait', seconds: 3 }],
+    ['wait for network', { kind: answer('wait') }, [], { kind: 'wait' }],
   ];
   it.each(cases)('%s', async (_name, answers, values, expected) => {
     const outcome = await resolve(input(when('step'), fakeClient(answers).client, values));
     expect(outcome).toMatchObject({ ok: true, resolved: expected });
+  });
+
+  it('caps a numeric wait at 30 seconds', async () => {
+    const outcome = await resolve(input(when('I wait 90 seconds'), fakeClient({ kind: answer('wait') }).client, ['90']));
+    expect(outcome).toMatchObject({ ok: true, resolved: { kind: 'wait', seconds: 30 } });
   });
 
   it('reports the minimum confidence across only the answers it consumed', async () => {

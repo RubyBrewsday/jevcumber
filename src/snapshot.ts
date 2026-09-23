@@ -50,6 +50,7 @@ function collect(): { title: string; text: string; elements: RawElement[]; headi
     if (type === 'search') return 'searchbox';
     if (type === 'number') return 'spinbutton';
     if (type === 'range') return 'slider';
+    if (type === 'file') return 'file';
     return 'textbox';
   };
 
@@ -97,7 +98,7 @@ function collect(): { title: string; text: string; elements: RawElement[]; headi
       value = (el as HTMLInputElement).checked ? 'checked' : 'unchecked';
     } else if (el.tagName === 'SELECT') {
       value = clean((el as HTMLSelectElement).selectedOptions[0]?.textContent);
-    } else if (isFormControl(el) && type !== 'password' && !isInputButton) {
+    } else if (isFormControl(el) && type !== 'password' && type !== 'file' && !isInputButton) {
       value = el.value || undefined;
     }
 
