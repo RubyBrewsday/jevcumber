@@ -48,7 +48,7 @@ export async function main(argv: string[]): Promise<number> {
     .option('--no-report', 'do not write failure evidence')
     .option(
       '--trace',
-      'record a Playwright trace per scenario; kept for scenarios that did not pass (with --no-report, traces still write to the default jevcumber-report dir)',
+      'record a Playwright trace per scenario; kept under --report-dir for scenarios that did not pass (even with --no-report)',
       false,
     )
     .addHelpText('after', '\nFirst time? Run `jevcumber install-browser` to download the Chromium build jevcumber drives.')

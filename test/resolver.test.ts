@@ -355,6 +355,21 @@ describe('judge', () => {
   });
 });
 
+describe('resolve: wait does not consult the text question needlessly', () => {
+  it('treats a step whose only literal is the number as seconds without asking about text', async () => {
+    const { client, requests } = fakeClient({ kind: answer('wait'), expected_text: answer('none', 0.2) });
+    const outcome = await resolve(input(when('I wait 1 second'), client, ['1']));
+    expect(outcome).toMatchObject({ ok: true, resolved: { kind: 'wait', seconds: 1 } });
+    expect(requests).toHaveLength(1);
+  });
+
+  it('does not count a low-confidence none for text when it falls back to seconds', async () => {
+    const { client } = fakeClient({ kind: answer('wait'), expected_text: answer('none', 0.2) });
+    const outcome = await resolve(input(when('I wait 2 seconds for "the results"'), client, ['2', 'the results']));
+    expect(outcome).toMatchObject({ ok: true, resolved: { kind: 'wait', seconds: 2 } });
+  });
+});
+
 describe('resolve: page-sourced values', () => {
   const snap: Snapshot = { ...SNAP, evidence: [{ text: 'Michelle Obama', kind: 'heading' }, { text: 'Barack Obama', kind: 'link' }] };
   const fill = { kind: answer('fill'), element: answer('e1') };

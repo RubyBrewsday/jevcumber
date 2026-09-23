@@ -322,12 +322,17 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
       break;
     }
     case 'wait': {
-      const text = values.length > 0 ? pickValue('expected_text') : undefined;
+      const seconds = bareWaitSeconds(step.text);
+      // "I wait 1 second": the only literal is the number itself, so there is no text to ask about.
+      const onlyTheNumber = seconds !== undefined && values.every((value) => /^\d+(?:\.\d+)?$/.test(value));
+      const before = consumed.length;
+      const text = values.length > 0 && !onlyTheNumber ? pickValue('expected_text') : undefined;
       if (text !== undefined) {
         resolved = { kind, text };
         break;
       }
-      const seconds = bareWaitSeconds(step.text);
+      // A `none` answer we then don't act on must not count against the step's confidence.
+      if (seconds !== undefined) consumed.length = before;
       if (seconds !== undefined) {
         resolved = { kind, seconds: Math.min(seconds, MAX_WAIT_SECONDS) };
         break;
