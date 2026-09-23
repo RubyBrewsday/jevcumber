@@ -87,11 +87,23 @@ describe('execute: assertions', () => {
     ).rejects.toThrow();
   });
 
-  it('judges semantic assertions against the 0.8 threshold', async () => {
+  it('judges described expectations against the 0.8 threshold and pins them to evidence', async () => {
     const semantic = { kind: 'assert', assertion: { form: 'semantic' } } as const;
-    await execute(page, semantic, { ...ctx, semantic: async () => 0.85 });
-    await expect(execute(page, semantic, { ...ctx, semantic: async () => 0.5 })).rejects.toThrow(/0\.50/);
+    const pinned = await execute(page, semantic, { ...ctx, judge: async () => ({ holds: 0.9, evidence: 'Email', evidenceConfidence: 0.8 }) });
+    expect(pinned).toEqual({ pinned: { form: 'text_visible', value: 'Email', pinned: true } });
+    expect(await execute(page, semantic, { ...ctx, judge: async () => ({ holds: 0.9 }) })).toEqual({});
+    expect(await execute(page, semantic, { ...ctx, judge: async () => ({ holds: 0.9, evidence: 'Email', evidenceConfidence: 0.5 }) })).toEqual({});
+    await expect(execute(page, semantic, { ...ctx, judge: async () => ({ holds: 0.5 }) })).rejects.toThrow(/0\.50/);
     await expect(execute(page, semantic, ctx)).rejects.toThrow(/--frozen/);
+  });
+
+  it('does not pin evidence that is not actually visible on the page', async () => {
+    const semantic = { kind: 'assert', assertion: { form: 'semantic' } } as const;
+    expect(await execute(page, semantic, { ...ctx, judge: async () => ({ holds: 0.9, evidence: 'Secret', evidenceConfidence: 0.9 }) })).toEqual({});
+  });
+
+  it('replays a pinned assertion as a plain text check', async () => {
+    await execute(page, { kind: 'assert', assertion: { form: 'text_visible', value: 'Email', pinned: true } }, ctx);
   });
 });
 

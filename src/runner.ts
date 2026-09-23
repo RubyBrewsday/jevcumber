@@ -147,12 +147,14 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
                 minConfidence: options.minConfidence,
               }),
             isValid: (resolved) => isValid(page, resolved),
-            execute: (resolved, step) =>
-              execute(page, resolved, {
+            execute: async (resolved, step) => {
+              // Task 5 will thread ExecuteResult.pinned back into the lockfile; for now discard it.
+              await execute(page, resolved, {
                 baseUrl: options.baseUrl,
                 stepText: step.text,
-                semantic: frozen ? undefined : async (text) => (await judge(getClient(), text, await snapshot(page, { elements: false }))).holds,
-              }),
+                judge: frozen ? undefined : async (text) => judge(getClient(), text, await snapshot(page, { elements: false, relevantTo: text })),
+              });
+            },
             onStep: (result) => options.reporter.step(result),
           });
           results.push({ scenario, steps });

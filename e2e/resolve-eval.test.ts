@@ -74,7 +74,7 @@ describe.skipIf(!process.env.TYPESAFE_API_KEY)('Jev resolves the fixture steps t
         await execute(page, expected, {
           baseUrl: server.url,
           stepText: step.text,
-          semantic: async (text) => (await judge(real, text, await snapshot(page, { elements: false }))).holds,
+          judge: async (text) => judge(real, text, await snapshot(page, { elements: false })),
         });
       }
       await context.close();
