@@ -659,7 +659,7 @@ describe('runAll', () => {
 
     const realBrowser = await chromium.launch();
     const exitCalls: number[] = [];
-    const baselineListeners = process.listenerCount('SIGINT');
+    const baselineListeners = process.listeners('SIGINT');
     const reporter: Reporter = { scenarioStart: () => {}, step: () => {}, scenarioEnd: () => {}, end: () => {} };
 
     try {
@@ -674,9 +674,12 @@ describe('runAll', () => {
         trace: false,
         workers: 1,
         launch: async () => {
-          // A SIGINT handler must already be installed by the time the browser is ready.
-          expect(process.listenerCount('SIGINT')).toBe(baselineListeners + 1);
-          process.emit('SIGINT');
+          // A SIGINT handler must already be installed by the time the browser is ready. Invoke
+          // jevcumber's handler directly rather than emitting a process-wide SIGINT, which would
+          // also fire any other listener alive in this test worker.
+          const added = process.listeners('SIGINT').filter((listener) => !baselineListeners.includes(listener));
+          expect(added).toHaveLength(1);
+          (added[0] as () => void)();
           return realBrowser;
         },
         exit: (code) => exitCalls.push(code),
@@ -687,7 +690,7 @@ describe('runAll', () => {
       const saved = JSON.parse(readFileSync(lockPathFor(featurePath), 'utf8'));
       expect(Object.keys(saved.steps)).toContain(stepKey(featureScenario, 0));
       // The handler is removed once the run ends: no listener lingers for a later SIGINT.
-      expect(process.listenerCount('SIGINT')).toBe(baselineListeners);
+      expect(process.listeners('SIGINT').filter((listener) => !baselineListeners.includes(listener))).toHaveLength(0);
     } finally {
       await realBrowser.close();
     }
