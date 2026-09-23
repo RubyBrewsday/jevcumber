@@ -9,6 +9,7 @@ import { toLocator } from './locators.js';
 import { Lockfile, lockPathFor, stepKey } from './lockfile.js';
 import { createClient, judge, resolve, type JevClient } from './resolver.js';
 import { snapshot } from './snapshot.js';
+import type { Reporter } from './reporters/index.js';
 import type { Assertion, ExecuteResult, Mode, ResolveOutcome, ResolvedStep, Scenario, ScenarioResult, Snapshot, Step, StepResult } from './types.js';
 
 const VALIDATE_TIMEOUT = 2000;
@@ -33,6 +34,13 @@ export async function runScenario(scenario: Scenario, deps: ScenarioDeps): Promi
   let skipping = false;
 
   const runStep = async (step: Step, index: number): Promise<StepResult> => {
+    const start = performance.now();
+    const result = await runStepInner(step, index);
+    const durationMs = result.status === 'skipped' ? 0 : performance.now() - start;
+    return { ...result, durationMs };
+  };
+
+  const runStepInner = async (step: Step, index: number): Promise<Omit<StepResult, 'durationMs'>> => {
     await deps.beforeStep?.();
     const key = stepKey(scenario, index);
     deps.lock.touch(key); // a run must not prune an entry for a step it started, even if it never resolves
@@ -101,9 +109,9 @@ export async function runScenario(scenario: Scenario, deps: ScenarioDeps): Promi
         return { step, status: 'failed', detail: `pinned check failed (${message(error)}); re-judge: ${message(again)}` };
       }
     }
-    const result: StepResult = { step, status: healed ? 'healed' : 'passed' };
-    if (note) result.note = note;
-    return result;
+    const stepResult: Omit<StepResult, 'durationMs'> = { step, status: healed ? 'healed' : 'passed' };
+    if (note) stepResult.note = note;
+    return stepResult;
   };
 
   for (const [index, step] of scenario.steps.entries()) {
@@ -115,14 +123,7 @@ export async function runScenario(scenario: Scenario, deps: ScenarioDeps): Promi
   return results;
 }
 
-export interface Reporter {
-  scenarioStart(scenario: Scenario): void;
-  step(result: StepResult): void;
-  /** Called once a scenario's steps (and any trace) are final. Optional: only reporters that
-   *  print scenario-level extras (e.g. a trace path) need it. */
-  scenarioEnd?(result: ScenarioResult): void;
-  end(results: ScenarioResult[]): void;
-}
+export type { Reporter } from './reporters/index.js';
 
 export interface RunOptions {
   paths: string[];
@@ -167,6 +168,7 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
   const browser = await chromium.launch({ headless: !options.headed });
   try {
     try {
+      options.reporter.start?.(scenarios);
       for (const scenario of scenarios) {
         options.reporter.scenarioStart(scenario);
         // Evidence and traces are written fresh each run: a stale screenshot/snapshot/trace from an
@@ -216,7 +218,7 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
                 const snap = lastSnapshot ?? (await snapshot(page, { elements: true }).catch(() => undefined));
                 if (await captureStep(page, dir, snap)) result.evidenceDir = dir;
               }
-              options.reporter.step(result);
+              options.reporter.step(scenario, result);
             },
           });
           const result: ScenarioResult = { scenario, steps };

@@ -211,7 +211,7 @@ describe('runScenario', () => {
       execute: async (r) => (r.kind === 'assert' && r.assertion.form === 'semantic' ? { pinned } : undefined),
     });
     const results = await runScenario(scenario, deps);
-    expect(results[0]).toEqual({ step: scenario.steps[0], status: 'passed', note: 'pinned to "Michelle Obama"' });
+    expect(results[0]).toEqual({ step: scenario.steps[0], status: 'passed', note: 'pinned to "Michelle Obama"', durationMs: expect.any(Number) });
     expect(lock.get(stepKey(scenario, 0))).toEqual({ kind: 'assert', assertion: pinned });
   });
 
@@ -291,6 +291,7 @@ describe('runAll', () => {
     const reporter: Reporter = {
       scenarioStart: () => calls.push('scenarioStart'),
       step: () => calls.push('step'),
+      scenarioEnd: () => calls.push('scenarioEnd'),
       end: () => calls.push('end'),
     };
     const results = await runAll({

@@ -4,7 +4,8 @@ import { realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { Command, InvalidArgumentError } from 'commander';
-import { consoleReporter, exitCode } from './reporter.js';
+import { exitCode } from './reporter.js';
+import { createReporters } from './reporters/index.js';
 import { runAll } from './runner.js';
 import type { Mode } from './types.js';
 
@@ -76,7 +77,11 @@ export async function main(argv: string[]): Promise<number> {
       headed: options.headed,
       minConfidence: options.minConfidence,
       tags: options.tags,
-      reporter: consoleReporter(),
+      reporter: createReporters(['console'], {
+        reportDir: options.reportDir,
+        isTTY: process.stdout.isTTY === true,
+        writeStatus: (s) => process.stderr.write(s),
+      }),
       reportDir: options.reportDir,
       report: options.report !== false,
       trace: options.trace,
