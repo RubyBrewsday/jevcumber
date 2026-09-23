@@ -197,6 +197,7 @@ footer a { text-underline-offset: 3px; }
     <ul>
       <li><a href="#demo">Demo</a></li>
       <li><a href="#how">How it works</a></li>
+      <li><a href="#new">What's new</a></li>
       <li><a href="#try">Try it</a></li>
       <li><a href="/cookbook">Cookbook</a></li>
       <li><a href="https://github.com/RubyBrewsday/jevcumber">GitHub ↗</a></li>
@@ -294,12 +295,28 @@ footer a { text-underline-offset: 3px; }
       <div class="card panel jar reveal">
         <h3>Pickled for later.</h3>
         <p>The first run saves what every step resolved to in a lockfile next to your feature. Commit it, like a <code>package-lock.json</code>.</p>
-        <p>After that, runs replay it: <strong>no API calls, no API key, no model variance.</strong> Change a step and only that step is re-resolved. Change your UI and the step heals itself — visibly, in the diff.</p>
+        <p>After that, runs replay it: <strong>no API calls, no API key, no model variance.</strong> Change a step and only that step is re-resolved. Change your UI and the step heals itself — visibly, in the diff. Even a described check like <em>I see an article about bagels</em> is judged once, pinned to the heading that proved it, and replays without the API.</p>
 <pre><span class="dim">$</span> jevcumber features/ --frozen  <span class="dim"># in CI</span>
 <span class="ok">✓</span> Given I am on https://en.wikipedia.org
 <span class="ok">✓</span> When I search for "bagel"
 <span class="ok">✓</span> Then I see an article about bagels</pre>
       </div>
+    </div>
+  </section>
+
+  <section id="new" class="reveal">
+    <p class="eyebrow">What's new in 0.2</p>
+    <h2>Fresh out of the jar.</h2>
+    <p class="sub">One release, four milestones, all shaped by running it against real sites. <code>npm install -g jevcumber</code> gets you 0.2.1.</p>
+    <div class="fineprint">
+      <div><h3>Deterministic in CI</h3><p>Descriptive checks are judged by Jev once, then <strong>pinned</strong> to the page title or heading that proved them — so they replay under <code>--frozen</code> with no key. A heading that later changes gets re-judged, not failed.</p></div>
+      <div><h3>Say it, don't quote it</h3><p><em>When I click the link that signs me out</em>. <em>When I fill in the new todo with the greeting on the page</em>. Values and targets can be described when they're on the page — at a higher confidence bar.</p></div>
+      <div><h3>More vocabulary</h3><p>Hover, clear, scroll, upload, wait (<em>for "Done" to appear</em>, <em>3 seconds</em>, <em>for the page to settle</em>); select by text, value or position. "Search for" types <em>and</em> presses Enter.</p></div>
+      <div><h3>Failures you can see</h3><p>Every failing step gets a screenshot and the page exactly as Jev saw it under <code>jevcumber-report/</code>. <code>--trace</code> keeps a Playwright trace for scenarios that didn't pass.</p></div>
+      <div><h3>Parallel by default</h3><p>Scenarios run across workers, each in its own browser context, with one clean block of output per scenario. Snapshots cost one browser round-trip per element instead of five — a 7,000-link page resolves in seconds.</p></div>
+      <div><h3>Fits your project</h3><p><code>jevcumber.config.mjs</code> holds your base URL and <code>beforeScenario</code>/<code>afterScenario</code> hooks. <code>--reporter json</code> speaks Cucumber's classic format; <code>--reporter junit</code> for CI dashboards.</p></div>
+      <div><h3>Explain and record</h3><p><code>jevcumber explain features/</code> shows what every step resolves to, with confidence — no browser, no key, and it fails if a lockfile entry is missing. <code>--record-eval</code> saves exactly what Jev was shown when something resolves wrong.</p></div>
+      <div><h3>Bring your agent</h3><p><code>npx skills add RubyBrewsday/jevcumber</code> teaches Claude Code, Cursor, Copilot and friends to install jevcumber and write features for you. The <a href="/cookbook">cookbook</a> lists every phrasing verified against Jev.</p></div>
     </div>
   </section>
 </main>
