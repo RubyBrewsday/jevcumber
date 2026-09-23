@@ -128,6 +128,8 @@ jevcumber <paths...> [options]
 | `--base-url <url>` | What paths like `"/login"` resolve against. Not needed when steps use full URLs. |
 | `--headed` | Show the browser. |
 | `--tags <expr>` | Cucumber tag expression, e.g. `"@smoke and not @wip"`. |
+| `--report-dir <dir>` | Where failure evidence goes (default `jevcumber-report`). `--no-report` disables it. |
+| `--trace` | Record a Playwright trace per scenario; keep it for scenarios that did not pass. |
 | `--min-confidence <n>` | Refuse to act below this confidence (default `0.6`; page-sourced values need `0.75`). |
 
 Exit code is `1` if any step failed, was ambiguous, or was undefined.
@@ -164,8 +166,21 @@ done by the official `@cucumber/gherkin`.
   in the lockfile the first time they resolve; if the page text changes, re-run with `--update`.
 - **An empty literal is ignored**, so a step can't clear a field with `""`.
 
-What a step can do today: navigate, click, fill (optionally submitting), select from a dropdown,
-check/uncheck, press a key, and assert.
+What a step can do today: navigate, click, fill (optionally submitting), clear a field, select from a
+dropdown (by label, value, or index), check/uncheck, press a key, hover, scroll to an element, upload
+a file (`I upload "photo.png" as the avatar` — the path is relative to the feature file), wait
+(`I wait for "Done" to appear`, `I wait 3 seconds`, `I wait for the page to settle`), and assert.
+
+## When a step fails
+
+For every step that fails, is ambiguous, or is undefined, jevcumber writes what it saw to
+`jevcumber-report/<feature>/<scenario>/<n>-<status>/`: `screenshot.png` (full page) and
+`snapshot.json` (the page as Jev was shown it — elements, evidence, text), and prints the path under
+the step. `--report-dir <dir>` moves it, `--no-report` turns it off, and `--trace` also records a
+Playwright trace per scenario, keeping `trace.zip` only for scenarios that did not pass (open it with
+`npx playwright show-trace trace.zip`); `--no-report` only disables the screenshot/snapshot, so
+`--trace` combined with `--no-report` still writes `trace.zip` under the default `jevcumber-report`
+directory.
 
 ## Some sites block automated browsers
 

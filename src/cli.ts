@@ -46,7 +46,11 @@ export async function main(argv: string[]): Promise<number> {
     .option('--tags <expr>', 'cucumber tag expression, e.g. "@smoke and not @wip"')
     .option('--report-dir <dir>', 'where screenshots and snapshots of failing steps are written', 'jevcumber-report')
     .option('--no-report', 'do not write failure evidence')
-    .option('--trace', 'record a Playwright trace per scenario; kept for scenarios that did not pass', false)
+    .option(
+      '--trace',
+      'record a Playwright trace per scenario; kept for scenarios that did not pass (with --no-report, traces still write to the default jevcumber-report dir)',
+      false,
+    )
     .addHelpText('after', '\nFirst time? Run `jevcumber install-browser` to download the Chromium build jevcumber drives.')
     .exitOverride();
 

@@ -191,18 +191,29 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
               const failing = result.status === 'failed' || result.status === 'ambiguous' || result.status === 'undefined';
               if (failing && options.reportDir) {
                 const dir = stepDir(options.reportDir, scenario, scenario.steps.indexOf(result.step), result.status);
-                await captureStep(page, dir, lastSnapshot);
-                result.evidenceDir = dir;
+                // Evidence capture is best-effort: a screenshot/snapshot failure must never abort the run.
+                try {
+                  await captureStep(page, dir, lastSnapshot);
+                  result.evidenceDir = dir;
+                } catch {
+                  // swallow: captureStep already catches internally, but guard here too in case it doesn't
+                }
               }
               options.reporter.step(result);
             },
           });
           results.push({ scenario, steps });
           if (options.trace) {
+            // --no-report --trace: with report evidence off, --report-dir is unset, so the trace
+            // still lands under the default `jevcumber-report` dir via the `?? 'jevcumber-report'` fallback.
             const passed = steps.every((s) => s.status === 'passed' || s.status === 'healed');
             const dir = scenarioDir(options.reportDir ?? 'jevcumber-report', scenario);
-            mkdirSync(dir, { recursive: true });
-            await context.tracing.stop(passed ? {} : { path: join(dir, 'trace.zip') });
+            try {
+              mkdirSync(dir, { recursive: true });
+              await context.tracing.stop(passed ? {} : { path: join(dir, 'trace.zip') });
+            } catch {
+              // best-effort, same as screenshot/snapshot capture: a trace failure must not abort the run
+            }
           }
         } finally {
           await context.close();

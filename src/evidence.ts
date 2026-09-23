@@ -15,9 +15,16 @@ export function stepDir(reportDir: string, scenario: Scenario, index: number, st
   return join(scenarioDir(reportDir, scenario), `${index + 1}-${status}`);
 }
 
-/** What the failing step saw: a screenshot now, and the last snapshot Jev was shown (if any). */
+/**
+ * What the failing step saw: a screenshot now, and the last snapshot Jev was shown (if any).
+ * Best-effort: evidence capture must never throw into the runner and abort an otherwise-good run.
+ */
 export async function captureStep(page: Page, dir: string, snapshot: Snapshot | undefined): Promise<void> {
-  mkdirSync(dir, { recursive: true });
-  await page.screenshot({ path: join(dir, 'screenshot.png'), fullPage: true }).catch(() => {});
-  writeFileSync(join(dir, 'snapshot.json'), `${JSON.stringify(snapshot ?? { url: page.url() }, null, 2)}\n`);
+  try {
+    mkdirSync(dir, { recursive: true });
+    await page.screenshot({ path: join(dir, 'screenshot.png'), fullPage: true }).catch(() => {});
+    writeFileSync(join(dir, 'snapshot.json'), `${JSON.stringify(snapshot ?? { url: page.url() }, null, 2)}\n`);
+  } catch {
+    // evidence is a courtesy, not a requirement: a bad report dir must not fail the run
+  }
 }
