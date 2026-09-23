@@ -95,6 +95,7 @@ export async function main(argv: string[]): Promise<number> {
       'number of scenarios to run concurrently (default: available CPUs under --frozen, capped at 4 otherwise for Jev\'s rate limits; 1 with --headed)',
       parseWorkers,
     )
+    .option('--record-eval <dir>', 'record every Jev exchange (sent, received, outcome) under this directory, for offline reproduction')
     .option('--config <path>', 'path to a jevcumber.config.js/.mjs (default: the nearest one found walking up from cwd)')
     .option('--reporter <name>', 'reporter to use (console, json, junit); repeatable', collect, [] as string[])
     .option('--output <file>', 'output file for the json/junit reporters (default under --report-dir)')
@@ -177,6 +178,7 @@ export async function main(argv: string[]): Promise<number> {
       trace: options.trace,
       workers,
       hooks: config.hooks,
+      recordEval: options.recordEval,
     });
     if (results.length === 0) {
       console.error('error: no scenarios found');

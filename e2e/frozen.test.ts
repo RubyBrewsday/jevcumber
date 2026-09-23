@@ -322,6 +322,13 @@ describe('jevcumber --frozen against the fixture app', () => {
     }
   });
 
+  it('accepts --record-eval alongside --frozen but writes nothing (no calls to Jev happen)', async () => {
+    const { dir } = workspace();
+    const recordDir = join(dir, 'eval');
+    expect(await main([dir, '--base-url', server.url, '--frozen', '--record-eval', recordDir])).toBe(0);
+    expect(existsSync(recordDir)).toBe(false);
+  });
+
   it('explain prints each step\'s resolution from the lockfile without touching a browser', async () => {
     const { dir } = workspace();
     const logs: string[] = [];

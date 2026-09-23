@@ -290,6 +290,20 @@ describe('resolve: malformed responses', () => {
   });
 });
 
+describe('resolve: onRequest', () => {
+  it('is called once with the state, questions, and answers actually exchanged', async () => {
+    const { client } = fakeClient({ kind: answer('click'), element: answer('e2') });
+    const exchanges: any[] = [];
+    await resolve({ ...input(when('I click Log in'), client, []), onRequest: (exchange) => exchanges.push(exchange) });
+    expect(exchanges).toHaveLength(1);
+    expect(exchanges[0]).toEqual({
+      state: expect.objectContaining({ step: { keyword: 'When', text: 'I click Log in' } }),
+      questions: expect.objectContaining({ kind: expect.anything() }),
+      answers: { kind: answer('click'), element: answer('e2') },
+    });
+  });
+});
+
 describe('shortlist', () => {
   it('keeps everything at or under the cap, preserving order', () => {
     expect(shortlist(SNAP.elements, 'anything', 60)).toEqual(SNAP.elements);
@@ -352,6 +366,18 @@ describe('judge', () => {
   it('throws on a malformed response instead of silently coercing a bad value to a number', async () => {
     const { client } = fakeClient({ holds: { type: 'noul', noul: 'yes' } });
     await expect(judge(client, 'x', snap)).rejects.toThrow(/no answer for "holds"/);
+  });
+
+  it('calls onRequest with the state, questions, and answers actually exchanged', async () => {
+    const { client } = fakeClient({ holds: noul(0.9), evidence: answer('x1', 0.9) });
+    const exchanges: any[] = [];
+    await judge(client, 'x', snap, (exchange) => exchanges.push(exchange));
+    expect(exchanges).toHaveLength(1);
+    expect(exchanges[0]).toEqual({
+      state: expect.objectContaining({ expectation: 'x' }),
+      questions: expect.objectContaining({ holds: expect.anything() }),
+      answers: { holds: noul(0.9), evidence: answer('x1', 0.9) },
+    });
   });
 });
 

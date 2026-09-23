@@ -28,6 +28,12 @@ export interface JevClient {
   }>;
 }
 
+export interface JevExchange {
+  state: unknown;
+  questions: Record<string, unknown>;
+  answers: Record<string, unknown>;
+}
+
 export interface ResolveInput {
   step: Step;
   scenarioName: string;
@@ -36,6 +42,8 @@ export interface ResolveInput {
   values: string[];
   client: JevClient;
   minConfidence: number;
+  /** Called once with exactly what was sent to and received from Jev, for --record-eval. */
+  onRequest?: (exchange: JevExchange) => void;
 }
 
 const KIND = {
@@ -224,6 +232,7 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
   }
 
   const { answers } = await client.systemOne({ state, questions, model: MODEL });
+  input.onRequest?.({ state, questions, answers });
 
   const kindAnswer = answers.kind as ChoiceAnswer | undefined;
   if (!kindAnswer || typeof kindAnswer.choice !== 'string') {
@@ -410,7 +419,12 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
 }
 
 /** Does the page satisfy a described expectation — and which page item shows it? */
-export async function judge(client: JevClient, stepText: string, snapshot: Snapshot): Promise<Judgment> {
+export async function judge(
+  client: JevClient,
+  stepText: string,
+  snapshot: Snapshot,
+  onRequest?: (exchange: JevExchange) => void,
+): Promise<Judgment> {
   const evidence = snapshot.evidence.map((e, i) => ({ id: `x${i + 1}`, text: e.text, kind: e.kind }));
   const questions: Record<string, unknown> = {
     // Spelling out both answers matters: measured on live pages, it moved true expectations from
@@ -429,11 +443,9 @@ export async function judge(client: JevClient, stepText: string, snapshot: Snaps
       },
     );
   }
-  const { answers } = await client.systemOne({
-    state: { expectation: stepText, page: { url: snapshot.url, title: snapshot.title, text: snapshot.text, evidence } },
-    questions,
-    model: MODEL,
-  });
+  const state = { expectation: stepText, page: { url: snapshot.url, title: snapshot.title, text: snapshot.text, evidence } };
+  const { answers } = await client.systemOne({ state, questions, model: MODEL });
+  onRequest?.({ state, questions, answers });
   const holds = answers.holds as { noul?: unknown } | undefined;
   if (typeof holds?.noul !== 'number') throw new Error('Unexpected response from Jev: no answer for "holds".');
   const picked = answers.evidence as ChoiceAnswer | undefined;
