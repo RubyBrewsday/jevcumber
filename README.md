@@ -244,6 +244,9 @@ Literals in your steps — including a password you write in a step — live in 
 are stored in the lockfile too, so use throwaway test credentials. Under `--frozen`, nothing is sent
 anywhere.
 
+`--record-eval <dir>` writes that same payload (page text, non-password field values) to disk for
+every call that isn't replayed from the lockfile — don't commit it.
+
 ## CI example (GitHub Actions)
 
 ```yaml
@@ -298,8 +301,10 @@ the wording in `src/resolver.ts`. Don't paste the fixture's own sentence into a 
 
 Reproducing a misresolution from a real run is easier with `--record-eval <dir>`: for every call,
 including ones that failed, it writes exactly what `resolve()` and `judge()` sent to Jev and got
-back, plus the outcome, as `<dir>/<feature>/<scenario-slug>/<step-number>.json` (and
-`<step-number>-judge.json` for the judge call a semantic assertion makes), each holding
+back, plus the outcome, as `<dir>/<feature-dir>/<feature>/<scenario-slug>/<step-number>.json` (and
+`<step-number>-judge.json` for the judge call a semantic assertion makes) — the feature's own
+directory, relative to cwd, is included, e.g. `features/login.feature` → `<dir>/features/login/…`,
+so two feature files sharing a basename don't collide — each holding
 `{ step, state, questions, answers, outcome }` — `outcome` is `{ error: <message> }` when the call
 threw after Jev responded (e.g. a malformed answer). It never writes anything under `--frozen`, since
 no Jev calls happen there. To turn a bad recording into

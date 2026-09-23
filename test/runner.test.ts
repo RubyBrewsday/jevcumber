@@ -536,6 +536,116 @@ describe('runAll', () => {
     expect(written.outcome).toMatchObject({ error: expect.stringMatching(/no answer for "kind"/) });
   });
 
+  it('--record-eval records a semantic assertion\'s judge() call as <n>-judge.json', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'jevcumber-'));
+    const featurePath = join(dir, 'semantic.feature');
+    writeFileSync(
+      featurePath,
+      ['Feature: Semantic', '  Scenario: only', '    Given I am on "about:blank"', '    Then I see something great', ''].join('\n'),
+    );
+    const [featureScenario] = parseFeature(readFileSync(featurePath, 'utf8'), featurePath);
+    const navResolved: ResolvedStep = { kind: 'navigate', value: 'about:blank' };
+    const semanticResolved: ResolvedStep = { kind: 'assert', assertion: { form: 'semantic' } };
+    writeFileSync(
+      lockPathFor(featurePath),
+      JSON.stringify(
+        {
+          version: 2,
+          steps: {
+            [stepKey(featureScenario, 0)]: { text: featureScenario.steps[0].text, resolved: navResolved },
+            [stepKey(featureScenario, 1)]: { text: featureScenario.steps[1].text, resolved: semanticResolved },
+          },
+        },
+        null,
+        2,
+      ),
+    );
+    const recordDir = join(dir, 'eval');
+
+    const clientSpy = vi
+      .spyOn(resolverModule, 'createClient')
+      .mockReturnValue({ systemOne: async () => ({ answers: {} }) });
+    const judgeSpy = vi.spyOn(resolverModule, 'judge').mockImplementation(async (_client, stepText, _snapshot, onRequest) => {
+      const exchange = { state: { expectation: stepText }, questions: { holds: { type: 'noul' } }, answers: { holds: { noul: 0.95 } } };
+      onRequest?.(exchange);
+      return { holds: 0.95 };
+    });
+
+    const realBrowser = await chromium.launch();
+    const reporter: Reporter = { scenarioStart: () => {}, step: () => {}, scenarioEnd: () => {}, end: () => {} };
+    try {
+      const results = await runAll({
+        paths: [dir],
+        mode: 'default',
+        headed: false,
+        minConfidence: 0.6,
+        reporter,
+        reportDir: join(dir, 'report'),
+        report: false,
+        trace: false,
+        workers: 1,
+        recordEval: recordDir,
+        launch: async () => realBrowser,
+      });
+      expect(results[0].steps[1].status).toBe('passed');
+    } finally {
+      judgeSpy.mockRestore();
+      clientSpy.mockRestore();
+      await realBrowser.close();
+    }
+
+    const written = JSON.parse(readFileSync(join(recordDir, 'semantic', 'only', '2-judge.json'), 'utf8'));
+    expect(written.outcome).toEqual({ holds: 0.95 });
+  });
+
+  it('--record-eval warns once to stderr when eval files can\'t be written, not once per call', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'jevcumber-'));
+    const featurePath = join(dir, 'twostep.feature');
+    writeFileSync(
+      featurePath,
+      ['Feature: Two', '  Scenario: only', '    Given I am on "about:blank"', '    Given I am on "about:blank" again', ''].join('\n'),
+    );
+    const blockingFile = join(dir, 'not-a-directory');
+    writeFileSync(blockingFile, 'just a file');
+
+    const clientSpy = vi
+      .spyOn(resolverModule, 'createClient')
+      .mockReturnValue({ systemOne: async () => ({ answers: {} }) });
+    const resolveSpy = vi.spyOn(resolverModule, 'resolve').mockImplementation(async (input) => {
+      const exchange = { state: { step: input.step }, questions: {}, answers: {} };
+      input.onRequest?.(exchange);
+      return { ok: true, resolved: { kind: 'navigate', value: 'about:blank' } as ResolvedStep, confidence: 0.9 };
+    });
+
+    const realBrowser = await chromium.launch();
+    const reporter: Reporter = { scenarioStart: () => {}, step: () => {}, scenarioEnd: () => {}, end: () => {} };
+    const errors = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    let warnings: unknown[];
+    try {
+      await runAll({
+        paths: [dir],
+        mode: 'update',
+        headed: false,
+        minConfidence: 0.6,
+        reporter,
+        reportDir: join(dir, 'report'),
+        report: false,
+        trace: false,
+        workers: 1,
+        recordEval: blockingFile,
+        launch: async () => realBrowser,
+      });
+      warnings = errors.mock.calls.flat().filter((c) => String(c).startsWith('warning: could not write --record-eval files under'));
+    } finally {
+      errors.mockRestore();
+      resolveSpy.mockRestore();
+      clientSpy.mockRestore();
+      await realBrowser.close();
+    }
+
+    expect(warnings).toEqual([`warning: could not write --record-eval files under ${blockingFile}\n`]);
+  });
+
   it('saves every lockfile without pruning and exits on SIGINT, removing the handler once the run ends', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'jevcumber-'));
     const featurePath = join(dir, 'sigint.feature');

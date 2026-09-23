@@ -222,6 +222,15 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
   };
 
   let completed = false;
+  // Warn at most once per run when --record-eval can't write its files (e.g. a bad or blocked
+  // directory), rather than once per Jev call, which would otherwise spam stderr for the whole run.
+  let recordEvalWarned = false;
+  const warnIfRecordEvalFailed = (wrote: boolean) => {
+    if (!wrote && !recordEvalWarned) {
+      recordEvalWarned = true;
+      process.stderr.write(`warning: could not write --record-eval files under ${options.recordEval}\n`);
+    }
+  };
 
   // Ctrl-C mid-run must not lose whatever Jev has already resolved: save every lockfile
   // (unpruned — the run never got the chance to finish touching every entry, so pruning here
@@ -287,11 +296,13 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
                 // malformed Jev response): the exchange that caused the failure is exactly what's
                 // needed to reproduce it offline.
                 if (options.recordEval && exchange) {
-                  recordEval(options.recordEval, scenario, index, 'resolve', {
-                    step,
-                    exchange,
-                    outcome: outcome ?? { error: message(caught) },
-                  });
+                  warnIfRecordEvalFailed(
+                    recordEval(options.recordEval, scenario, index, 'resolve', {
+                      step,
+                      exchange,
+                      outcome: outcome ?? { error: message(caught) },
+                    }),
+                  );
                 }
               }
             },
@@ -322,11 +333,13 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
                         // Same as the resolve() wrapper above: record whenever onRequest fired,
                         // even when judge() threw afterwards.
                         if (options.recordEval && exchange) {
-                          recordEval(options.recordEval, scenario, currentIndex, 'judge', {
-                            step,
-                            exchange,
-                            outcome: judgment ?? { error: message(caught) },
-                          });
+                          warnIfRecordEvalFailed(
+                            recordEval(options.recordEval, scenario, currentIndex, 'judge', {
+                              step,
+                              exchange,
+                              outcome: judgment ?? { error: message(caught) },
+                            }),
+                          );
                         }
                       }
                     },
