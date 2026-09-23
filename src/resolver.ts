@@ -9,6 +9,8 @@ export const PAGE_SOURCED_MIN_CONFIDENCE = 0.75;
 export interface Judgment {
   holds: number;
   evidence?: string;
+  /** Where the evidence lives: the document title is not visible text and is checked differently. */
+  evidenceKind?: 'title' | 'text';
   evidenceConfidence?: number;
 }
 
@@ -35,7 +37,7 @@ export interface ResolveInput {
 }
 
 const KIND = {
-  navigate: 'Open a URL or path directly in the browser, e.g. "I am on /login" or "I visit the home page at /".',
+  navigate: 'Open a URL or path directly in the browser, e.g. "I am on /login" or "I visit the home page at /". Only for a Given or When step: a Then step saying "I am on the todos page" is a check that the page is showing (assert).',
   click: 'Click or tap an element such as a button, link, tab, or menu item.',
   fill: 'Type or enter text into an input field, replacing its content.',
   select: 'Choose an option from a dropdown or select box.',
@@ -351,7 +353,7 @@ export async function judge(client: JevClient, stepText: string, snapshot: Snaps
   };
   if (evidence.length > 0) {
     questions.evidence = choice(
-      'Assume the web page in `page` satisfies `expectation`. Which single item of `page.evidence` — a title, heading, or link on the page — best shows that it does? Prefer the item that names what the expectation is about.',
+      'Assume the web page in `page` satisfies `expectation`. Which single item of `page.evidence` best shows that it does? Prefer the page title or a heading that names what the expectation is about; choose a link or button only when the expectation is about that control.',
       {
         ...Object.fromEntries(evidence.map((e) => [e.id, { text: e.text }])),
         none: 'No single item shows it; the expectation is about the page as a whole, an ordering, a count, or something not captured by any listed item.',
@@ -367,7 +369,12 @@ export async function judge(client: JevClient, stepText: string, snapshot: Snaps
   if (typeof holds?.noul !== 'number') throw new Error('Unexpected response from Jev: no answer for "holds".');
   const picked = answers.evidence as ChoiceAnswer | undefined;
   const item = picked && picked.choice !== 'none' ? evidence.find((e) => e.id === picked.choice) : undefined;
-  return item ? { holds: holds.noul, evidence: item.text, evidenceConfidence: picked!.confidence } : { holds: holds.noul };
+  // Several items can legitimately show the same thing (a title and an h1 that agree), which spreads
+  // probability and lowers the distribution's confidence even though any of them is a sound pin.
+  // The chosen item's own probability is the better guard against pinning to something incidental.
+  return item
+    ? { holds: holds.noul, evidence: item.text, evidenceKind: item.text === snapshot.title ? 'title' : 'text', evidenceConfidence: picked!.probabilities[picked!.choice] }
+    : { holds: holds.noul };
 }
 
 export function createClient(): JevClient {

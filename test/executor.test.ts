@@ -90,11 +90,22 @@ describe('execute: assertions', () => {
   it('judges described expectations against the 0.8 threshold and pins them to evidence', async () => {
     const semantic = { kind: 'assert', assertion: { form: 'semantic' } } as const;
     const pinned = await execute(page, semantic, { ...ctx, judge: async () => ({ holds: 0.9, evidence: 'Email', evidenceConfidence: 0.8 }) });
-    expect(pinned).toEqual({ pinned: { form: 'text_visible', value: 'Email', pinned: true } });
+    expect(pinned).toEqual({ pinned: { form: 'text_visible', value: 'Email', pinned: true }, confidence: 0.8 });
     expect(await execute(page, semantic, { ...ctx, judge: async () => ({ holds: 0.9 }) })).toEqual({});
     expect(await execute(page, semantic, { ...ctx, judge: async () => ({ holds: 0.9, evidence: 'Email', evidenceConfidence: 0.5 }) })).toEqual({});
     await expect(execute(page, semantic, { ...ctx, judge: async () => ({ holds: 0.5 }) })).rejects.toThrow(/0\.50/);
     await expect(execute(page, semantic, ctx)).rejects.toThrow(/--frozen/);
+  });
+
+  it('pins title evidence as a title check', async () => {
+    const semantic = { kind: 'assert', assertion: { form: 'semantic' } } as const;
+    await page.setContent('<title>Bagel - Wikipedia</title><h1>Bagel</h1>');
+    const judge = async () => ({ holds: 0.95, evidence: 'Bagel - Wikipedia', evidenceKind: 'title' as const, evidenceConfidence: 0.8 });
+    expect(await execute(page, semantic, { ...ctx, judge })).toEqual({
+      pinned: { form: 'title_contains', value: 'Bagel - Wikipedia', pinned: true }, confidence: 0.8,
+    });
+    await execute(page, { kind: 'assert', assertion: { form: 'title_contains', value: 'Bagel - Wikipedia', pinned: true } }, ctx);
+    await expect(execute(page, { kind: 'assert', assertion: { form: 'title_contains', value: 'Nope' } }, ctx)).rejects.toThrow();
   });
 
   it('does not pin evidence that is not actually visible on the page', async () => {

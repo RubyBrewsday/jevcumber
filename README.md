@@ -128,7 +128,7 @@ jevcumber <paths...> [options]
 | `--base-url <url>` | What paths like `"/login"` resolve against. Not needed when steps use full URLs. |
 | `--headed` | Show the browser. |
 | `--tags <expr>` | Cucumber tag expression, e.g. `"@smoke and not @wip"`. |
-| `--min-confidence <n>` | Refuse to act below this confidence (default `0.6`). |
+| `--min-confidence <n>` | Refuse to act below this confidence (default `0.6`; page-sourced values need `0.75`). |
 
 Exit code is `1` if any step failed, was ambiguous, or was undefined.
 
@@ -151,8 +151,13 @@ done by the official `@cucumber/gherkin`.
 - **Two kinds of `Then`.** Quoted text, a named control, or a URL fragment becomes a fast Playwright
   assertion that is cached and replayed: `Then I should see "Welcome"`, `Then the "Save" button is
   visible`, `Then the URL should contain "/todos"`. A *described* expectation —
-  `Then I see an article about bagels` — is judged by Jev against the page on every run, so it needs
-  the API key and cannot run under `--frozen`.
+  `Then I see an article about bagels` — is judged by Jev on the first run and then **pinned** to the
+  page evidence that showed it (the article's heading or the page title): later runs replay that as a
+  plain check, frozen or not. Only expectations with no single piece of evidence ("the list is sorted
+  by date") stay live-judged, and those need the key and can't run under `--frozen`.
+- **Values can be described, not just quoted.** `When I fill in the new todo with the greeting on the
+  page` picks the text from the page's headings and links. Because the step gave less, jevcumber asks
+  for higher confidence (0.75) before acting on a page-sourced value.
 - **An empty literal is ignored**, so a step can't clear a field with `""`.
 
 What a step can do today: navigate, click, fill (optionally submitting), select from a dropdown,

@@ -1,6 +1,6 @@
 {
   "name": "jevcumber",
-  "version": "0.1.2",
+  "version": "0.2.0",
   "description": "Run Cucumber feature files against a web UI with no step definitions, powered by Jev.",
   "keywords": [
     "cucumber",

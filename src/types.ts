@@ -42,7 +42,7 @@ export interface Snapshot {
 }
 
 export type Assertion =
-  | { form: 'text_visible' | 'text_not_visible' | 'url_contains'; value: string; pinned?: true }
+  | { form: 'text_visible' | 'text_not_visible' | 'url_contains' | 'title_contains'; value: string; pinned?: true }
   | { form: 'element_visible'; locator: LocatorSpec }
   | { form: 'element_has_value'; locator: LocatorSpec; value: string }
   | { form: 'semantic' };
@@ -70,6 +70,8 @@ export interface StepResult {
 
 export interface ExecuteResult {
   pinned?: Assertion;
+  /** How sure Jev was of the pinned evidence; stored in the lockfile alongside it. */
+  confidence?: number;
 }
 
 export interface ScenarioResult {

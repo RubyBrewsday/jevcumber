@@ -68,6 +68,9 @@ async function check(page: Page, assertion: Assertion, ctx: ExecuteContext): Pro
     case 'text_not_visible':
       await expect(page.getByText(assertion.value).first()).toBeHidden({ timeout });
       return {};
+    case 'title_contains':
+      await expect(page).toHaveTitle(new RegExp(escapeRegExp(assertion.value)), { timeout });
+      return {};
     case 'url_contains':
       await expect(page).toHaveURL(new RegExp(escapeRegExp(assertion.value)), { timeout });
       return {};
@@ -88,8 +91,14 @@ async function check(page: Page, assertion: Assertion, ctx: ExecuteContext): Pro
       // Pin to concrete evidence so later runs can replay this step without Jev — but only if that
       // evidence is really visible, or the pinned check would fail on the very next run.
       if (judgment.evidence && (judgment.evidenceConfidence ?? 0) >= PIN_MIN_CONFIDENCE) {
-        const visible = await page.getByText(judgment.evidence, { exact: true }).first().isVisible().catch(() => false);
-        if (visible) return { pinned: { form: 'text_visible', value: judgment.evidence, pinned: true } };
+        if (judgment.evidenceKind === 'title') {
+          if ((await page.title()).includes(judgment.evidence)) {
+            return { pinned: { form: 'title_contains', value: judgment.evidence, pinned: true }, confidence: judgment.evidenceConfidence };
+          }
+        } else {
+          const visible = await page.getByText(judgment.evidence, { exact: true }).first().isVisible().catch(() => false);
+          if (visible) return { pinned: { form: 'text_visible', value: judgment.evidence, pinned: true }, confidence: judgment.evidenceConfidence };
+        }
       }
       return {};
     }

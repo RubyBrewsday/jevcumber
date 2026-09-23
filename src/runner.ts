@@ -72,7 +72,7 @@ export async function runScenario(scenario: Scenario, deps: ScenarioDeps): Promi
     try {
       const result = await deps.execute(resolved, step);
       if (result?.pinned) {
-        deps.lock.set(key, step.text, { kind: 'assert', assertion: result.pinned });
+        deps.lock.set(key, step.text, { kind: 'assert', assertion: result.pinned }, result.confidence);
         note = pinNote(result.pinned);
       }
     } catch (error) {
@@ -83,7 +83,7 @@ export async function runScenario(scenario: Scenario, deps: ScenarioDeps): Promi
       try {
         const rejudged = await deps.execute({ kind: 'assert', assertion: { form: 'semantic' } }, step);
         if (rejudged?.pinned) {
-          deps.lock.set(key, step.text, { kind: 'assert', assertion: rejudged.pinned });
+          deps.lock.set(key, step.text, { kind: 'assert', assertion: rejudged.pinned }, rejudged.confidence);
           note = pinNote(rejudged.pinned);
         } else {
           deps.lock.set(key, step.text, { kind: 'assert', assertion: { form: 'semantic' } });

@@ -31,4 +31,8 @@ export const RESOLVED: Record<string, ResolvedStep> = {
   'I submit "Feed the cat" as a new todo': { kind: 'fill', locator: newTodo, value: 'Feed the cat', submit: true },
   'I should see "Feed the cat"': sees('Feed the cat'),
   'I see a greeting for dana': { kind: 'assert', assertion: { form: 'semantic' } },
+  'I see the todos page for dana': { kind: 'assert', assertion: { form: 'semantic' } },
+  'I fill in the new todo field with the greeting on the page': { kind: 'fill', locator: newTodo, value: 'Welcome, dana' },
+  'I click "Add"': { kind: 'click', locator: add },
+  'I should see "dana"': sees('dana'),
 };

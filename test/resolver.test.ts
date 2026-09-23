@@ -234,11 +234,17 @@ describe('shortlist', () => {
 
 describe('judge', () => {
   const snap: Snapshot = { ...SNAP, evidence: ['Login - MyApp', 'Sign in', 'Forgot password?'] };
+
+  it('reports title evidence as a title', async () => {
+    const titled = { ...snap, title: 'Login - MyApp' };
+    const { client } = fakeClient({ holds: noul(0.9), evidence: answer('x1', 0.9) });
+    expect(await judge(client, 'x', titled)).toMatchObject({ evidence: 'Login - MyApp', evidenceKind: 'title' });
+  });
   const noul = (p: number) => ({ type: 'noul', noul: p });
 
   it('asks holds and evidence together over the step and page, and returns both', async () => {
     const { client, requests } = fakeClient({ holds: noul(0.93), evidence: answer('x2', 0.9) });
-    expect(await judge(client, 'I see the login page', snap)).toEqual({ holds: 0.93, evidence: 'Sign in', evidenceConfidence: 0.9 });
+    expect(await judge(client, 'I see the login page', snap)).toEqual({ holds: 0.93, evidence: 'Sign in', evidenceKind: 'text', evidenceConfidence: 0.9 });
     expect(requests[0].state).toEqual({
       expectation: 'I see the login page',
       page: { url: snap.url, title: snap.title, text: snap.text, evidence: [{ id: 'x1', text: 'Login - MyApp' }, { id: 'x2', text: 'Sign in' }, { id: 'x3', text: 'Forgot password?' }] },

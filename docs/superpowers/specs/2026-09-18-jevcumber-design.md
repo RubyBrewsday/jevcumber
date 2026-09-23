@@ -220,6 +220,11 @@ actually needs Jev; its absence is reported on that step.
 localhost/IP host (`http://` assumed). Only a relative path needs `--base-url`, and fails with a message
 saying so when it is absent.
 
+Superseded in v0.2 (see `2026-09-22-v0.2-milestones-design.md`, Milestone A): `semanticCheck`
+became `judge()`, which also selects evidence so described expectations are pinned to a
+`text_visible` or `title_contains` assertion; `input_text` may select page text; the lockfile is
+version 2 and records confidence.
+
 ## Error handling
 
 - API errors: the SDK retries 429/529; anything else fails the step with the
