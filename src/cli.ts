@@ -12,6 +12,8 @@ import { createReporters, type ReporterName } from './reporters/index.js';
 import { runAll } from './runner.js';
 import type { Mode } from './types.js';
 
+const VERSION: string = createRequire(import.meta.url)('../package.json').version;
+
 function parseConfidence(raw: string): number {
   const value = Number(raw);
   if (!(value >= 0 && value <= 1)) throw new InvalidArgumentError('must be a number between 0 and 1');
@@ -88,6 +90,7 @@ export async function main(argv: string[]): Promise<number> {
 
   const program = new Command()
     .name('jevcumber')
+    .version(VERSION, '-v, --version', 'print the jevcumber version')
     .description('Run Cucumber feature files against a web UI with no step definitions.')
     .argument('<paths...>', 'feature files or directories')
     .option('--base-url <url>', 'URL that relative paths in steps resolve against (not needed when steps use full URLs)', parseBaseUrl)
