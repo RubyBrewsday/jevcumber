@@ -13,7 +13,7 @@
         "value": "bagel",
         "submit": true
       },
-      "confidence": 0.9
+      "confidence": 0.93
     },
     "8558dfd43b045eb0d8d02c3b634da9347fe29cd9febf4bdff87a7c47e780743c": {
       "text": "the URL should contain \"/wiki/Bagel\"",
@@ -36,7 +36,7 @@
           "pinned": true
         }
       },
-      "confidence": 0.78
+      "confidence": 0.89
     },
     "feb0e5c1e21e511f322d6cdf6cca873d84edeaecb82c4023ba9f72bac8925695": {
       "text": "I am on https://en.wikipedia.org",
@@ -44,7 +44,7 @@
         "kind": "navigate",
         "value": "https://en.wikipedia.org"
       },
-      "confidence": 0.97
+      "confidence": 0.94
     }
   }
 }

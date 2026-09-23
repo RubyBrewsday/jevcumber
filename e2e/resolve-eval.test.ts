@@ -77,7 +77,7 @@ describe.skipIf(!process.env.TYPESAFE_API_KEY)('Jev resolves the fixture steps t
           judge: async (text) => {
             const verdict = await judge(real, text, await snapshot(page, { elements: false, relevantTo: text }));
             lines.push(`       judge            holds ${verdict.holds.toFixed(2)}  evidence=${JSON.stringify(verdict.evidence ?? null)} (${(verdict.evidenceConfidence ?? 0).toFixed(2)})`);
-            if (scenario.name.includes('pinned') && !(verdict.evidence && (verdict.evidenceConfidence ?? 0) >= 0.6)) wrong++;
+            if (scenario.name.includes('pinned') && !(verdict.evidence && (verdict.evidenceConfidence ?? 0) >= 0.5)) wrong++;
             return verdict;
           },
         });

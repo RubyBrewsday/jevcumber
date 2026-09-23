@@ -13,7 +13,7 @@
 ## Global Constraints
 
 - Node ≥ 20; ESM; relative imports end in `.js`; `src/resolver.ts` is the only module importing `@typesafe-ai/sdk`.
-- Semantic pass threshold 0.8. Pinning needs evidence confidence ≥ 0.6. Page-sourced (`p…`) picks need confidence ≥ 0.75. Default `--min-confidence` 0.6.
+- Semantic pass threshold 0.8. Pinning needs evidence probability ≥ 0.5. Page-sourced (`p…`) picks need confidence ≥ 0.75. Default `--min-confidence` 0.6.
 - Evidence list: title, `h1`–`h3`, link and button names; deduplicated; each trimmed to 80 chars; ≤ 40 items ranked by `mostRelevant` against the step.
 - Lockfile `"version": 2`; v1 loads and is rewritten as v2 on save; other versions error. Entries: `{ text, resolved, confidence? }`.
 - Never call Jev under `--frozen`; a failing pinned assertion under `--frozen` is a plain failure.

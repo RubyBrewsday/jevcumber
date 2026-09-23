@@ -115,7 +115,7 @@ describe('execute: assertions', () => {
     expect(pinned).toEqual({ pinned: { form: 'heading_visible', value: 'Bagel', pinned: true }, confidence: 0.8 });
     // Below PIN_MIN_CONFIDENCE: not pinned.
     expect(
-      await execute(page, semantic, { ...ctx, judge: async () => ({ holds: 0.9, evidence: 'Bagel', evidenceKind: 'heading', evidenceConfidence: 0.5 }) }),
+      await execute(page, semantic, { ...ctx, judge: async () => ({ holds: 0.9, evidence: 'Bagel', evidenceKind: 'heading', evidenceConfidence: 0.4 }) }),
     ).toEqual({});
     // Not actually a heading on the page: not pinned.
     expect(

@@ -4,7 +4,9 @@ import type { Judgment } from './resolver.js';
 import type { Assertion, ExecuteResult, LocatorSpec, ResolvedStep } from './types.js';
 
 export const SEMANTIC_THRESHOLD = 0.8;
-export const PIN_MIN_CONFIDENCE = 0.6;
+// A majority is enough: pins are already restricted to the title and headings, and a title and an h1
+// that say the same thing legitimately split the probability between them.
+export const PIN_MIN_CONFIDENCE = 0.5;
 const ASSERT_TIMEOUT = 5000;
 // Try selecting by visible label first (what a step's literal usually names); fall back to the
 // option's value for cases like <option value="fr">Republique</option>. The label attempt gets a
