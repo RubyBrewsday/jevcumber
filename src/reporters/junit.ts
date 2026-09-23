@@ -6,13 +6,18 @@ import type { Reporter } from './index.js';
 const scenarioPassed = (result: ScenarioResult) =>
   result.steps.every((step) => step.status === 'passed' || step.status === 'healed');
 
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHARS = /[\x00-\x08\x0B\x0C\x0E-\x1F]/g;
+
 function escapeXml(value: string): string {
   return value
+    .replace(CONTROL_CHARS, '') // e.g. stray ANSI CSI bytes left after \x1b[...m is stripped upstream
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
+    .replace(/'/g, '&apos;')
+    .replace(/\n/g, '&#10;');
 }
 
 const scenarioTimeSeconds = (result: ScenarioResult) =>

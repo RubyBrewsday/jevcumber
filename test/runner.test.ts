@@ -6,7 +6,7 @@ import { chromium, type Browser } from '@playwright/test';
 import { parseFeature } from '../src/gherkin.js';
 import { Lockfile, lockPathFor, stepKey } from '../src/lockfile.js';
 import { runAll, runScenario, type Reporter, type ScenarioDeps } from '../src/runner.js';
-import type { ResolveOutcome, ResolvedStep, Scenario, ScenarioResult } from '../src/types.js';
+import type { ResolveOutcome, ResolvedStep, Scenario, ScenarioResult, StepResult } from '../src/types.js';
 
 const scenario: Scenario = {
   uri: 'a.feature', feature: 'A', name: 's', occurrence: 0, tags: [],
@@ -130,6 +130,18 @@ describe('runScenario', () => {
     const results = await runScenario(scenario, deps);
     expect(results.map((r) => r.status)).toEqual(['passed', 'failed', 'skipped']);
     expect(results[1].detail).toContain('element not found');
+  });
+
+  it('strips ANSI escape sequences from a thrown error\'s message', async () => {
+    const { deps } = harness({
+      execute: async (_r, step) => {
+        if (step.text === 'two') throw new Error('\u001b[2mexpect\u001b[22m(locator).toBeVisible()');
+      },
+    });
+    const results = await runScenario(scenario, deps);
+    expect(results[1].status).toBe('failed');
+    expect(results[1].detail).toBe('expect(locator).toBeVisible()');
+    expect(results[1].detail).not.toMatch(/\x1b/);
   });
 
   it('fails a step when the resolver throws (e.g. missing API key)', async () => {
@@ -285,6 +297,29 @@ describe('runScenario', () => {
     expect(lock.getEntry(stepKey(scenario, 0))?.confidence).toBe(0.9);
   });
 
+  it('streams the synthetic beforeScenario hook failure through onStep at index -1', async () => {
+    const seen: { result: StepResult; index: number }[] = [];
+    const { deps } = harness({
+      before: () => { throw new Error('boom'); },
+      onStep: (result, index) => { seen.push({ result, index }); },
+    });
+    await runScenario(scenario, deps);
+    expect(seen[0].index).toBe(-1);
+    expect(seen[0].result).toMatchObject({ step: { text: 'beforeScenario hook' }, status: 'failed' });
+  });
+
+  it('streams the synthetic afterScenario hook failure through onStep at index steps.length', async () => {
+    const seen: { result: StepResult; index: number }[] = [];
+    const { deps } = harness({
+      after: () => { throw new Error('cleanup failed'); },
+      onStep: (result, index) => { seen.push({ result, index }); },
+    });
+    await runScenario(scenario, deps);
+    const last = seen.at(-1)!;
+    expect(last.index).toBe(scenario.steps.length);
+    expect(last.result).toMatchObject({ step: { text: 'afterScenario hook' }, status: 'failed' });
+  });
+
   it('a throwing before hook fails every step and never resolves', async () => {
     const { deps, calls, lock } = harness({
       before: () => {
@@ -400,9 +435,10 @@ describe('runAll', () => {
 
     const endCalls: ScenarioResult[][] = [];
     const scenarioEndCalls: ScenarioResult[] = [];
+    const stepCalls: StepResult[] = [];
     const reporter: Reporter = {
       scenarioStart: () => {},
-      step: () => {},
+      step: (_scenario, result) => stepCalls.push(result),
       scenarioEnd: (result) => scenarioEndCalls.push(result),
       end: (results) => endCalls.push(results),
     };
@@ -426,7 +462,7 @@ describe('runAll', () => {
       expect(results[0].steps[0].status).toBe('passed');
       expect(results[1].scenario.name).toBe('second');
       expect(results[1].steps).toEqual([
-        { step: { keyword: 'Given', text: 'second' }, status: 'failed', detail: expect.stringContaining('synthetic crash'), durationMs: 0 },
+        { step: { keyword: 'Given', text: 'scenario crashed' }, status: 'failed', detail: expect.stringContaining('synthetic crash'), durationMs: 0 },
       ]);
 
       // scenarioEnd fires exactly once per scenario, and end() is called exactly once with the
@@ -435,11 +471,20 @@ describe('runAll', () => {
       expect(endCalls).toHaveLength(1);
       expect(endCalls[0]).toEqual(results);
 
-      // The lockfile is still saved despite the crash: the first scenario's cached entry survives
-      // (the second scenario crashed before it ever reached the lockfile, so its untouched entry
-      // is pruned on this complete, unfiltered run — the save itself must not be skipped or corrupted).
+      // The synthetic crash result reaches the reporter as a normal step event too, before
+      // scenarioEnd, so console/json/junit output (and any evidence capture) sees it.
+      const crashSteps = stepCalls.filter((s) => s.step.text === 'scenario crashed');
+      expect(crashSteps).toHaveLength(1);
+      expect(crashSteps[0]).toMatchObject({ status: 'failed', detail: expect.stringContaining('synthetic crash') });
+
+      // The lockfile is still saved despite the crash: the first scenario's cached entry survives,
+      // and the crashed second scenario's entry is NOT pruned even though it never got far enough
+      // to touch its own key by resolving — a crash must not cause its lockfile entries to be
+      // discarded on this complete, unfiltered run's pruning save.
       const saved = JSON.parse(readFileSync(lockPathFor(featurePath), 'utf8'));
-      expect(Object.keys(saved.steps)).toEqual([stepKey(featureScenarios[0], 0)]);
+      expect(Object.keys(saved.steps).sort()).toEqual(
+        [stepKey(featureScenarios[0], 0), stepKey(featureScenarios[1], 0)].sort(),
+      );
     } finally {
       await realBrowser.close();
     }

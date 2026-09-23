@@ -33,7 +33,11 @@ export interface ScenarioDeps {
   after?(results: StepResult[]): void | Promise<void>;
 }
 
-const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+// A thrown error's message can carry ANSI colour codes (Playwright's expect() matchers add them
+// even outside a real terminal), which look like escaped garbage in console/JUnit/JSON output.
+// eslint-disable-next-line no-control-regex
+const ANSI = /\x1b\[[0-9;]*[A-Za-z]/g;
+const message = (error: unknown) => (error instanceof Error ? error.message : String(error)).replace(ANSI, '');
 const pinNote = (assertion: Assertion) => `pinned to ${JSON.stringify('value' in assertion ? assertion.value : assertion)}`;
 
 export async function runScenario(scenario: Scenario, deps: ScenarioDeps): Promise<StepResult[]> {
@@ -125,12 +129,15 @@ export async function runScenario(scenario: Scenario, deps: ScenarioDeps): Promi
     try {
       await deps.before();
     } catch (error) {
-      results.push({
+      const result: StepResult = {
         step: { keyword: 'Given', text: 'beforeScenario hook' },
         status: 'failed',
         detail: `beforeScenario hook: ${message(error)}`,
         durationMs: 0,
-      });
+      };
+      results.push(result);
+      // Index -1: this synthetic result precedes every real step, which are indexed from 0.
+      await deps.onStep?.(result, -1);
       skipping = true;
     }
   }
@@ -146,12 +153,15 @@ export async function runScenario(scenario: Scenario, deps: ScenarioDeps): Promi
     try {
       await deps.after(results);
     } catch (error) {
-      results.push({
+      const result: StepResult = {
         step: { keyword: 'Given', text: 'afterScenario hook' },
         status: 'failed',
         detail: `afterScenario hook: ${message(error)}`,
         durationMs: 0,
-      });
+      };
+      results.push(result);
+      // Index scenario.steps.length: this synthetic result follows every real step.
+      await deps.onStep?.(result, scenario.steps.length);
     }
   }
 
@@ -294,23 +304,32 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
         while (next < scenarios.length) {
           const index = next++;
           const scenario = scenarios[index];
-          // scenarioEnd is emitted exactly once per scenario, here in the worker rather than
-          // inside runOne, so a crash after runOne has already produced (but not yet returned)
-          // a result can never cause it to fire twice.
+          let result: ScenarioResult;
           try {
-            const result = await runOne(scenario);
-            ordered[index] = result;
-            options.reporter.scenarioEnd?.(result);
+            result = await runOne(scenario);
           } catch (error) {
             // A worker crash on one scenario (e.g. context creation failing) must not take down
-            // the others still in the queue.
-            const failedResult: ScenarioResult = {
-              scenario,
-              steps: [{ step: { keyword: 'Given', text: scenario.name }, status: 'failed', detail: message(error), durationMs: 0 }],
+            // the others still in the queue. It also must not cause this scenario's lockfile
+            // entries to be pruned: the crash happened before runScenario ever got a chance to
+            // touch them itself, so every step key is touched here instead.
+            if (!frozen) {
+              const lock = lockFor(scenario.uri);
+              for (let i = 0; i < scenario.steps.length; i++) lock.touch(stepKey(scenario, i));
+            }
+            const synthetic: StepResult = {
+              step: { keyword: 'Given', text: 'scenario crashed' },
+              status: 'failed',
+              detail: message(error),
+              durationMs: 0,
             };
-            ordered[index] = failedResult;
-            options.reporter.scenarioEnd?.(failedResult);
+            result = { scenario, steps: [synthetic] };
+            options.reporter.step(scenario, synthetic);
           }
+          ordered[index] = result;
+          // scenarioEnd is emitted exactly once per scenario, outside the try/catch above, so a
+          // throwing reporter can never cause this scenario to be reported (and land in the catch)
+          // a second time.
+          options.reporter.scenarioEnd?.(result);
         }
       };
       await Promise.all(Array.from({ length: workers }, worker));

@@ -52,6 +52,26 @@ describe('junit xml', () => {
     expect(xml).toContain('&lt;b&gt;'); // escaped
     expect(xml.startsWith('<?xml version="1.0" encoding="UTF-8"?>')).toBe(true);
   });
+
+  it('drops control characters and ANSI-derived bytes, and encodes newlines, in a detail', () => {
+    const withControlChars: ScenarioResult[] = [
+      {
+        scenario: { uri: 'features/x.feature', feature: 'X', name: 'ctrl', occurrence: 0, tags: [], steps: [] },
+        steps: [
+          {
+            step: { keyword: 'Then', text: 'x' },
+            status: 'failed',
+            detail: '\u001b[2mexpect\u001b[22m(locator).toBeVisible()\nreceived: hidden',
+            durationMs: 1,
+          },
+        ],
+      },
+    ];
+    const xml = toJunitXml(withControlChars);
+    // eslint-disable-next-line no-control-regex
+    expect(xml).not.toMatch(/[\x00-\x08\x0B\x0C\x0E-\x1F]/); // the ESC byte (\x1b) is gone
+    expect(xml).toContain('&#10;received: hidden'); // newline encoded, not a literal line break
+  });
 });
 
 const scenario: Scenario = { uri: 'a.feature', feature: 'A', name: 's', occurrence: 0, tags: [], steps: [] };
