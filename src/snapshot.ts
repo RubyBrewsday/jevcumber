@@ -25,6 +25,10 @@ interface RawElement {
   placeholder?: string;
   text?: string;
   sensitive?: boolean;
+  // Whether each locator kind, if built from this element's own testId/role+name/label/
+  // placeholder/text, would resolve uniquely — computed in-page so at most one Playwright
+  // round trip (the chosen spec's own count()) is spent per candidate element.
+  unique: { testid?: boolean; role?: boolean; label?: boolean; placeholder?: boolean; text?: boolean };
 }
 
 // Runs inside the page: must be self-contained (no references to module scope).
@@ -73,11 +77,15 @@ function collect(): { title: string; text: string; elements: RawElement[]; headi
     return el.checkVisibility ? el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true }) : true;
   };
 
-  const elements: RawElement[] = [];
-  for (const el of Array.from(document.querySelectorAll(SELECTOR))) {
-    if (!visible(el)) continue;
-    if ((el as HTMLButtonElement).disabled || el.getAttribute('aria-disabled') === 'true') continue;
-
+  // Two passes over the same SELECTOR-matched elements (visible or not, disabled or not): the
+  // first computes every candidate's role/name/label/placeholder/text and tallies how many
+  // elements would share each locator's key, mirroring what Playwright's getBy* would count.
+  // Text/role counting is intentionally scoped to SELECTOR matches rather than the whole
+  // document (which is what getByText/getByRole actually scan): a wrong "unique" guess just
+  // costs snapshotOnce one extra count() round trip via its fallback loop, never a correctness
+  // bug, since the chosen spec is always re-verified against the real page.
+  const all = Array.from(document.querySelectorAll(SELECTOR));
+  const parsed = all.map((el) => {
     const type = (el.getAttribute('type') ?? '').toLowerCase();
     const isInputButton = el.tagName === 'INPUT' && ['button', 'submit', 'reset'].includes(type);
     const label = labelOf(el);
@@ -91,28 +99,61 @@ function collect(): { title: string; text: string; elements: RawElement[]; headi
       clean(el.querySelector('img')?.getAttribute('alt')) ||
       clean(el.getAttribute('title')) ||
       placeholder;
-    if (!name && !el.getAttribute('data-testid')) continue;
+    const testId = el.getAttribute('data-testid') ?? undefined;
+    return { el, type, isInputButton, label, placeholder, text, name, testId, role: roleOf(el) };
+  });
+
+  const bump = (map: Map<string, number>, key: string | undefined) => {
+    if (!key) return;
+    map.set(key, (map.get(key) ?? 0) + 1);
+  };
+  const testidCounts = new Map<string, number>();
+  const labelCounts = new Map<string, number>();
+  const placeholderCounts = new Map<string, number>();
+  const textCounts = new Map<string, number>();
+  const roleCounts = new Map<string, number>();
+  for (const p of parsed) {
+    bump(testidCounts, p.testId);
+    bump(labelCounts, p.label || undefined);
+    bump(placeholderCounts, p.placeholder || undefined);
+    bump(textCounts, p.text || undefined);
+    if (p.name) bump(roleCounts, `${p.role}:${p.name}`);
+  }
+
+  const elements: RawElement[] = [];
+  for (const p of parsed) {
+    const { el } = p;
+    if (!visible(el)) continue;
+    if ((el as HTMLButtonElement).disabled || el.getAttribute('aria-disabled') === 'true') continue;
+    if (!p.name && !p.testId) continue;
 
     let value: string | undefined;
-    if (type === 'checkbox' || type === 'radio') {
+    if (p.type === 'checkbox' || p.type === 'radio') {
       value = (el as HTMLInputElement).checked ? 'checked' : 'unchecked';
     } else if (el.tagName === 'SELECT') {
       value = clean((el as HTMLSelectElement).selectedOptions[0]?.textContent);
-    } else if (isFormControl(el) && type !== 'password' && type !== 'file' && !isInputButton) {
+    } else if (isFormControl(el) && p.type !== 'password' && p.type !== 'file' && !p.isInputButton) {
       value = el.value || undefined;
     }
 
     elements.push({
-      role: roleOf(el),
-      name,
+      role: p.role,
+      name: p.name,
       value,
-      testId: el.getAttribute('data-testid') ?? undefined,
-      label: label || undefined,
-      placeholder: placeholder || undefined,
-      text: text || undefined,
+      testId: p.testId,
+      label: p.label || undefined,
+      placeholder: p.placeholder || undefined,
+      text: p.text || undefined,
       // TODO: only password inputs are treated as sensitive; other sensitive inputs (e.g.
       // autocomplete="cc-number") still send their values in the snapshot.
-      sensitive: type === 'password' || undefined,
+      sensitive: p.type === 'password' || undefined,
+      unique: {
+        testid: p.testId ? testidCounts.get(p.testId) === 1 : undefined,
+        role: p.name ? roleCounts.get(`${p.role}:${p.name}`) === 1 : undefined,
+        label: p.label ? labelCounts.get(p.label) === 1 : undefined,
+        placeholder: p.placeholder ? placeholderCounts.get(p.placeholder) === 1 : undefined,
+        text: p.text ? textCounts.get(p.text) === 1 : undefined,
+      },
     });
   }
 
@@ -126,20 +167,21 @@ function collect(): { title: string; text: string; elements: RawElement[]; headi
   return { title: document.title, text: clean(content?.innerText), elements, headings };
 }
 
-// `repeated` holds role+name and text keys that occur more than once on the page: those locators
-// cannot be unique, so they are not worth a round-trip.
-function specsFor(raw: RawElement, repeated: Set<string>): LocatorSpec[] {
+// Only specs whose in-page uniqueness held are returned, in preference order, so snapshotOnce
+// spends at most one Playwright count() round trip verifying the first (and, on the rare
+// disagreement between this in-page computation and Playwright's own, a second on the next).
+function specsFor(raw: RawElement): LocatorSpec[] {
   const specs: LocatorSpec[] = [];
-  if (raw.testId) specs.push({ by: 'testid', value: raw.testId });
+  if (raw.testId && raw.unique.testid) specs.push({ by: 'testid', value: raw.testId });
   // Password fields: skip the role locator. Some Playwright/browser combinations compute
   // an accessible role of "textbox" for input[type=password] (contrary to the no-role
   // assumption in this module's design), which would otherwise let a role+name locator
   // resolve uniquely and match a sensitive field. Fall straight through to label/placeholder/text.
   // getByRole('file') never matches: a file input has no such accessible role in Playwright/ARIA.
-  if (raw.name && !raw.sensitive && raw.role !== 'file' && !repeated.has(roleKey(raw))) specs.push({ by: 'role', role: raw.role, name: raw.name });
-  if (raw.label) specs.push({ by: 'label', value: raw.label });
-  if (raw.placeholder) specs.push({ by: 'placeholder', value: raw.placeholder });
-  if (raw.text && !repeated.has(textKey(raw))) specs.push({ by: 'text', value: raw.text });
+  if (raw.name && !raw.sensitive && raw.role !== 'file' && raw.unique.role) specs.push({ by: 'role', role: raw.role, name: raw.name });
+  if (raw.label && raw.unique.label) specs.push({ by: 'label', value: raw.label });
+  if (raw.placeholder && raw.unique.placeholder) specs.push({ by: 'placeholder', value: raw.placeholder });
+  if (raw.text && raw.unique.text) specs.push({ by: 'text', value: raw.text });
   return specs;
 }
 
@@ -174,21 +216,6 @@ function evidenceOf(raw: { title: string; headings: string[]; elements: RawEleme
   return mostRelevant([...byText.values()], relevantTo, (item) => item.text, MAX_EVIDENCE, (item) => item.kind === 'title' || item.kind === 'heading');
 }
 
-const roleKey = (raw: RawElement) => `role:${raw.role}:${raw.name}`;
-const textKey = (raw: RawElement) => `text:${raw.text}`;
-
-function repeatedKeys(elements: RawElement[]): Set<string> {
-  const seen = new Set<string>();
-  const repeated = new Set<string>();
-  for (const element of elements) {
-    for (const key of [roleKey(element), textKey(element)]) {
-      if (seen.has(key)) repeated.add(key);
-      seen.add(key);
-    }
-  }
-  return repeated;
-}
-
 const NAVIGATION_RETRIES = 5;
 
 // An action such as submitting a search can still be navigating when the next step starts:
@@ -211,7 +238,6 @@ async function snapshotOnce(page: Page, options: SnapshotOptions): Promise<Snaps
   const evidence = evidenceOf(raw, options.relevantTo ?? '');
   if (options.elements === false) return { url: page.url(), title: raw.title, elements: [], text, evidence };
 
-  const repeated = repeatedKeys(raw.elements);
   // On a page of links, controls (fields, buttons) are the likelier targets: they win ties.
   const candidates = mostRelevant(
     raw.elements,
@@ -223,7 +249,7 @@ async function snapshotOnce(page: Page, options: SnapshotOptions): Promise<Snaps
 
   const located = await Promise.all(
     candidates.map(async (element) => {
-      for (const spec of specsFor(element, repeated)) {
+      for (const spec of specsFor(element)) {
         if ((await toLocator(page, spec).count()) === 1) return { element, spec };
       }
       return undefined; // not uniquely locatable: better omitted than ambiguous
