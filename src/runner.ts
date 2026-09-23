@@ -87,10 +87,11 @@ export async function runScenario(scenario: Scenario, deps: ScenarioDeps): Promi
           note = pinNote(rejudged.pinned);
         } else {
           deps.lock.set(key, step.text, { kind: 'assert', assertion: { form: 'semantic' } });
+          note = 'no longer pinned: needs Jev under --frozen';
         }
         healed = true;
       } catch (again) {
-        return { step, status: 'failed', detail: message(again) };
+        return { step, status: 'failed', detail: `pinned check failed (${message(error)}); re-judge: ${message(again)}` };
       }
     }
     const result: StepResult = { step, status: healed ? 'healed' : 'passed' };

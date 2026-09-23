@@ -204,6 +204,41 @@ describe('runScenario', () => {
     expect(lock.get(stepKey(scenario, 0))).toEqual({ kind: 'assert', assertion: fresh });
   });
 
+  it('fails a pinned assertion when the re-judge itself throws, combining both errors in the detail', async () => {
+    const stale: ResolvedStep = { kind: 'assert', assertion: { form: 'text_visible', value: 'Old heading', pinned: true } };
+    const { deps, calls } = harness(
+      {
+        execute: async (r) => {
+          if (r.kind === 'assert' && r.assertion.form === 'text_visible') throw new Error('not visible');
+          if (r.kind === 'assert' && r.assertion.form === 'semantic') throw new Error('Jev judged the expectation unmet (p=0.10)');
+          return undefined;
+        },
+      },
+      { 0: stale },
+    );
+    const results = await runScenario(scenario, deps);
+    expect(results[0]).toMatchObject({ status: 'failed' });
+    expect(results[0].detail).toBe('pinned check failed (not visible); re-judge: Jev judged the expectation unmet (p=0.10)');
+    expect(calls.execute).toHaveLength(2); // the original pinned check, then the semantic re-judge
+  });
+
+  it('heals a pinned assertion to a live semantic check when the re-judge holds but finds no pin', async () => {
+    const stale: ResolvedStep = { kind: 'assert', assertion: { form: 'text_visible', value: 'Old heading', pinned: true } };
+    const { deps, lock } = harness(
+      {
+        execute: async (r) => {
+          if (r.kind === 'assert' && r.assertion.form === 'text_visible') throw new Error('not visible');
+          if (r.kind === 'assert' && r.assertion.form === 'semantic') return {}; // holds, but nothing to pin to
+          return undefined;
+        },
+      },
+      { 0: stale },
+    );
+    const results = await runScenario(scenario, deps);
+    expect(results[0]).toMatchObject({ status: 'healed', note: 'no longer pinned: needs Jev under --frozen' });
+    expect(lock.get(stepKey(scenario, 0))).toEqual({ kind: 'assert', assertion: { form: 'semantic' } });
+  });
+
   it('fails a pinned assertion outright under --frozen', async () => {
     const stale: ResolvedStep = { kind: 'assert', assertion: { form: 'text_visible', value: 'Old', pinned: true } };
     const { deps, calls } = harness({ mode: 'frozen', execute: async () => { throw new Error('not visible'); } }, { 0: stale });
