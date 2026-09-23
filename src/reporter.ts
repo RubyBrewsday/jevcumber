@@ -30,6 +30,9 @@ export function consoleReporter(write: (line: string) => void = console.log): Re
       if (detail) for (const line of detail.split('\n')) write(`        ${line}`);
       if (evidenceDir) write(`        evidence: ${evidenceDir}`);
     },
+    scenarioEnd(result) {
+      if (result.trace) write(`    trace: ${result.trace}`);
+    },
     end(results) {
       const passed = results.filter(scenarioPassed).length;
       const scenarioParts = [`${passed} passed`];

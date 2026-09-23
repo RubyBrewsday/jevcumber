@@ -77,7 +77,8 @@ export async function main(argv: string[]): Promise<number> {
       minConfidence: options.minConfidence,
       tags: options.tags,
       reporter: consoleReporter(),
-      reportDir: options.report === false ? undefined : options.reportDir,
+      reportDir: options.reportDir,
+      report: options.report !== false,
       trace: options.trace,
     });
     if (results.length === 0) {

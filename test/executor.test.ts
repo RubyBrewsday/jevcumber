@@ -91,11 +91,16 @@ describe('execute: actions', () => {
     await execute(page, { kind: 'wait', text: 'Later' }, ctx);
   });
 
-  it('selects by index when no label or value matches, and treats fill on a <select> as select', async () => {
+  it('selects by 1-based index when no label or value matches', async () => {
+    // Country: 1=UK, 2=France, 3=Republique (value "fr").
     await execute(page, { kind: 'select', locator: role('combobox', 'Country'), value: '2' }, ctx);
-    expect(await page.getByRole('combobox').inputValue()).toBe('fr');
-    await execute(page, { kind: 'fill', locator: role('combobox', 'Country'), value: 'UK' }, ctx);
-    expect(await page.getByRole('combobox').inputValue()).toBe('UK');
+    expect(await page.getByRole('combobox').inputValue()).toBe('France');
+  });
+
+  it('throws a message listing the options when nothing matches label, value, or index', async () => {
+    await expect(
+      execute(page, { kind: 'select', locator: role('combobox', 'Country'), value: 'Germany' }, ctx),
+    ).rejects.toThrow('No option labelled or valued "Germany" (options: UK, France, Republique)');
   });
 
 describe('execute: assertions', () => {

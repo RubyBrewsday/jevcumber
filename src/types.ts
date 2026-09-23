@@ -87,6 +87,7 @@ export interface ExecuteResult {
 export interface ScenarioResult {
   scenario: Scenario;
   steps: StepResult[];
+  trace?: string;
 }
 
 export type Mode = 'default' | 'frozen' | 'update';

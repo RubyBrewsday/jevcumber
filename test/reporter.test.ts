@@ -37,6 +37,20 @@ describe('consoleReporter', () => {
     expect(lines).toContain('    ✓ When step 0 (pinned to "X")');
   });
 
+  it('prints a trace path via scenarioEnd when the scenario result has one', () => {
+    const lines: string[] = [];
+    const reporter = consoleReporter((line) => lines.push(line));
+    reporter.scenarioEnd?.({ scenario, steps: [], trace: 'jevcumber-report/a/b/trace.zip' });
+    expect(lines).toContain('    trace: jevcumber-report/a/b/trace.zip');
+  });
+
+  it('prints nothing via scenarioEnd when the scenario result has no trace', () => {
+    const lines: string[] = [];
+    const reporter = consoleReporter((line) => lines.push(line));
+    reporter.scenarioEnd?.({ scenario, steps: [] });
+    expect(lines).toEqual([]);
+  });
+
   it('prints the evidence path after the detail lines', () => {
     const lines: string[] = [];
     const reporter = consoleReporter((line) => lines.push(line));

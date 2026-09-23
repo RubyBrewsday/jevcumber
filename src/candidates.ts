@@ -1,6 +1,6 @@
 import type { Step } from './types.js';
 
-const QUOTED = /"([^"]+)"|(?<!\w)'([^']+)'(?!\w)/g;
+export const QUOTED = /"([^"]+)"|(?<!\w)'([^']+)'(?!\w)/g;
 // A bare literal is a URL, a host (domain, localhost, or IPv4 — but not the domain of an email address),
 // a /path, or a number.
 const BARE =

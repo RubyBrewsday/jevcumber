@@ -1,5 +1,5 @@
-import { mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, rmSync } from 'node:fs';
+import { dirname, join, resolve as resolvePath } from 'node:path';
 import { chromium, type Page } from '@playwright/test';
 import { extractValues } from './candidates.js';
 import { captureStep, scenarioDir, stepDir } from './evidence.js';
@@ -19,7 +19,10 @@ export interface ScenarioDeps {
   resolve(step: Step, previousSteps: string[]): Promise<ResolveOutcome>;
   isValid(resolved: ResolvedStep): Promise<boolean>;
   execute(resolved: ResolvedStep, step: Step): Promise<ExecuteResult | void>;
-  onStep?(result: StepResult): void | Promise<void>;
+  /** Called at the very start of each step, before the cache is consulted. Lets the caller clear
+   *  any per-step state (e.g. the last Jev snapshot) so a skipped resolve doesn't reuse stale data. */
+  beforeStep?(): void | Promise<void>;
+  onStep?(result: StepResult, index: number): void | Promise<void>;
 }
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -30,6 +33,7 @@ export async function runScenario(scenario: Scenario, deps: ScenarioDeps): Promi
   let skipping = false;
 
   const runStep = async (step: Step, index: number): Promise<StepResult> => {
+    await deps.beforeStep?.();
     const key = stepKey(scenario, index);
     deps.lock.touch(key); // a run must not prune an entry for a step it started, even if it never resolves
     if (skipping) {
@@ -106,7 +110,7 @@ export async function runScenario(scenario: Scenario, deps: ScenarioDeps): Promi
     const result = await runStep(step, index);
     if (result.status !== 'passed' && result.status !== 'healed') skipping = true;
     results.push(result);
-    await deps.onStep?.(result);
+    await deps.onStep?.(result, index);
   }
   return results;
 }
@@ -114,6 +118,9 @@ export async function runScenario(scenario: Scenario, deps: ScenarioDeps): Promi
 export interface Reporter {
   scenarioStart(scenario: Scenario): void;
   step(result: StepResult): void;
+  /** Called once a scenario's steps (and any trace) are final. Optional: only reporters that
+   *  print scenario-level extras (e.g. a trace path) need it. */
+  scenarioEnd?(result: ScenarioResult): void;
   end(results: ScenarioResult[]): void;
 }
 
@@ -125,7 +132,10 @@ export interface RunOptions {
   minConfidence: number;
   tags?: string;
   reporter: Reporter;
-  reportDir?: string;
+  reportDir: string;
+  /** Whether failure evidence (screenshot + snapshot) is captured. `--report-dir` still applies to
+   *  `trace` even when this is false, so a trace-only run's trace lands where the user asked. */
+  report: boolean;
   trace: boolean;
 }
 
@@ -159,6 +169,11 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
     try {
       for (const scenario of scenarios) {
         options.reporter.scenarioStart(scenario);
+        // Evidence and traces are written fresh each run: a stale screenshot/snapshot/trace from an
+        // earlier run of this scenario must never linger and be mistaken for this run's.
+        if (options.report || options.trace) {
+          rmSync(scenarioDir(options.reportDir, scenario), { recursive: true, force: true });
+        }
         const context = await browser.newContext();
         if (options.trace) await context.tracing.start({ screenshots: true, snapshots: true });
         try {
@@ -185,36 +200,41 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
               execute(page, resolved, {
                 baseUrl: options.baseUrl,
                 stepText: step.text,
+                featureDir: dirname(resolvePath(scenario.uri)),
                 judge: frozen ? undefined : async (text) => judge(getClient(), text, await snapshot(page, { elements: false, relevantTo: text })),
               }),
-            onStep: async (result) => {
+            // A step that never calls resolve() (a cached hit, or --frozen) leaves no snapshot of
+            // its own: clearing this at the start of every step stops a failing step from being
+            // captured against the previous step's stale snapshot.
+            beforeStep: () => {
+              lastSnapshot = undefined;
+            },
+            onStep: async (result, index) => {
               const failing = result.status === 'failed' || result.status === 'ambiguous' || result.status === 'undefined';
-              if (failing && options.reportDir) {
-                const dir = stepDir(options.reportDir, scenario, scenario.steps.indexOf(result.step), result.status);
-                // Evidence capture is best-effort: a screenshot/snapshot failure must never abort the run.
-                try {
-                  await captureStep(page, dir, lastSnapshot);
-                  result.evidenceDir = dir;
-                } catch {
-                  // swallow: captureStep already catches internally, but guard here too in case it doesn't
-                }
+              if (failing && options.report) {
+                const dir = stepDir(options.reportDir, scenario, index, result.status);
+                const snap = lastSnapshot ?? (await snapshot(page, { elements: true }).catch(() => undefined));
+                if (await captureStep(page, dir, snap)) result.evidenceDir = dir;
               }
               options.reporter.step(result);
             },
           });
-          results.push({ scenario, steps });
+          const result: ScenarioResult = { scenario, steps };
           if (options.trace) {
-            // --no-report --trace: with report evidence off, --report-dir is unset, so the trace
-            // still lands under the default `jevcumber-report` dir via the `?? 'jevcumber-report'` fallback.
+            // --no-report --trace: report evidence is off, but --report-dir still applies to traces.
             const passed = steps.every((s) => s.status === 'passed' || s.status === 'healed');
-            const dir = scenarioDir(options.reportDir ?? 'jevcumber-report', scenario);
+            const dir = scenarioDir(options.reportDir, scenario);
             try {
               mkdirSync(dir, { recursive: true });
-              await context.tracing.stop(passed ? {} : { path: join(dir, 'trace.zip') });
+              const traceFile = join(dir, 'trace.zip');
+              await context.tracing.stop(passed ? {} : { path: traceFile });
+              if (!passed) result.trace = traceFile;
             } catch {
               // best-effort, same as screenshot/snapshot capture: a trace failure must not abort the run
             }
           }
+          results.push(result);
+          options.reporter.scenarioEnd?.(result);
         } finally {
           await context.close();
         }

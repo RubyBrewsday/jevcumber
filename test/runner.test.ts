@@ -173,6 +173,24 @@ describe('runScenario', () => {
     expect(seen).toEqual(['passed', 'passed', 'passed']);
   });
 
+  it('passes the step index to onStep', async () => {
+    const seen: number[] = [];
+    const { deps } = harness({ onStep: (_r, index) => seen.push(index) });
+    await runScenario(scenario, deps);
+    expect(seen).toEqual([0, 1, 2]);
+  });
+
+  it('calls beforeStep at the start of every step, including a skipped one', async () => {
+    let calls = 0;
+    const { deps } = harness({
+      beforeStep: () => { calls++; },
+      resolve: async (step) => (step.text === 'two' ? { ok: false, reason: 'undefined', detail: 'nope' } : ok(nav('/x'))),
+    });
+    await runScenario(scenario, deps);
+    // one → beforeStep, resolve; two → beforeStep, resolve (fails); three → beforeStep, skipped.
+    expect(calls).toBe(3);
+  });
+
   it('awaits an async onStep hook', async () => {
     const seen: string[] = [];
     const { deps } = harness({
@@ -282,6 +300,8 @@ describe('runAll', () => {
       headed: false,
       minConfidence: 0.6,
       reporter,
+      reportDir: 'jevcumber-report',
+      report: true,
       trace: false,
     });
     expect(results).toEqual([]);

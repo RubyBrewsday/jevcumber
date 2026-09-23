@@ -135,7 +135,8 @@ function specsFor(raw: RawElement, repeated: Set<string>): LocatorSpec[] {
   // an accessible role of "textbox" for input[type=password] (contrary to the no-role
   // assumption in this module's design), which would otherwise let a role+name locator
   // resolve uniquely and match a sensitive field. Fall straight through to label/placeholder/text.
-  if (raw.name && !raw.sensitive && !repeated.has(roleKey(raw))) specs.push({ by: 'role', role: raw.role, name: raw.name });
+  // getByRole('file') never matches: a file input has no such accessible role in Playwright/ARIA.
+  if (raw.name && !raw.sensitive && raw.role !== 'file' && !repeated.has(roleKey(raw))) specs.push({ by: 'role', role: raw.role, name: raw.name });
   if (raw.label) specs.push({ by: 'label', value: raw.label });
   if (raw.placeholder) specs.push({ by: 'placeholder', value: raw.placeholder });
   if (raw.text && !repeated.has(textKey(raw))) specs.push({ by: 'text', value: raw.text });
