@@ -87,12 +87,9 @@ describe('execute: assertions', () => {
     ).rejects.toThrow();
   });
 
-  it('judges described expectations against the 0.8 threshold and pins them to evidence', async () => {
+  it('judges described expectations against the 0.8 threshold', async () => {
     const semantic = { kind: 'assert', assertion: { form: 'semantic' } } as const;
-    const pinned = await execute(page, semantic, { ...ctx, judge: async () => ({ holds: 0.9, evidence: 'Email', evidenceConfidence: 0.8 }) });
-    expect(pinned).toEqual({ pinned: { form: 'text_visible', value: 'Email', pinned: true }, confidence: 0.8 });
     expect(await execute(page, semantic, { ...ctx, judge: async () => ({ holds: 0.9 }) })).toEqual({});
-    expect(await execute(page, semantic, { ...ctx, judge: async () => ({ holds: 0.9, evidence: 'Email', evidenceConfidence: 0.5 }) })).toEqual({});
     await expect(execute(page, semantic, { ...ctx, judge: async () => ({ holds: 0.5 }) })).rejects.toThrow(/0\.50/);
     await expect(execute(page, semantic, ctx)).rejects.toThrow(/--frozen/);
   });
@@ -108,13 +105,42 @@ describe('execute: assertions', () => {
     await expect(execute(page, { kind: 'assert', assertion: { form: 'title_contains', value: 'Nope' } }, ctx)).rejects.toThrow();
   });
 
-  it('does not pin evidence that is not actually visible on the page', async () => {
+  it('pins heading evidence as a heading_visible check, but only when it is actually visible and confident enough', async () => {
     const semantic = { kind: 'assert', assertion: { form: 'semantic' } } as const;
-    expect(await execute(page, semantic, { ...ctx, judge: async () => ({ holds: 0.9, evidence: 'Secret', evidenceConfidence: 0.9 }) })).toEqual({});
+    await page.setContent('<title>T</title><h1>Bagel</h1>');
+    const pinned = await execute(page, semantic, {
+      ...ctx,
+      judge: async () => ({ holds: 0.9, evidence: 'Bagel', evidenceKind: 'heading', evidenceConfidence: 0.8 }),
+    });
+    expect(pinned).toEqual({ pinned: { form: 'heading_visible', value: 'Bagel', pinned: true }, confidence: 0.8 });
+    // Below PIN_MIN_CONFIDENCE: not pinned.
+    expect(
+      await execute(page, semantic, { ...ctx, judge: async () => ({ holds: 0.9, evidence: 'Bagel', evidenceKind: 'heading', evidenceConfidence: 0.5 }) }),
+    ).toEqual({});
+    // Not actually a heading on the page: not pinned.
+    expect(
+      await execute(page, semantic, { ...ctx, judge: async () => ({ holds: 0.9, evidence: 'Missing', evidenceKind: 'heading', evidenceConfidence: 0.9 }) }),
+    ).toEqual({});
   });
 
-  it('replays a pinned assertion as a plain text check', async () => {
+  it('never pins link or button evidence', async () => {
+    const semantic = { kind: 'assert', assertion: { form: 'semantic' } } as const;
+    expect(
+      await execute(page, semantic, { ...ctx, judge: async () => ({ holds: 0.9, evidence: 'Go', evidenceKind: 'link', evidenceConfidence: 0.9 }) }),
+    ).toEqual({});
+    expect(
+      await execute(page, semantic, { ...ctx, judge: async () => ({ holds: 0.9, evidence: 'Go', evidenceKind: 'button', evidenceConfidence: 0.9 }) }),
+    ).toEqual({});
+  });
+
+  it('replays a pinned text_visible assertion (an older lockfile) as a plain text check', async () => {
     await execute(page, { kind: 'assert', assertion: { form: 'text_visible', value: 'Email', pinned: true } }, ctx);
+  });
+
+  it('replays a pinned heading_visible assertion, and fails when the heading is gone', async () => {
+    await page.setContent('<title>T</title><h1>Bagel</h1>');
+    await execute(page, { kind: 'assert', assertion: { form: 'heading_visible', value: 'Bagel' } }, ctx);
+    await expect(execute(page, { kind: 'assert', assertion: { form: 'heading_visible', value: 'Nope' } }, ctx)).rejects.toThrow();
   });
 });
 

@@ -44,7 +44,7 @@ export class Lockfile {
     if (!existsSync(path)) return new Lockfile(path, {});
     const data = JSON.parse(readFileSync(path, 'utf8'));
     if (!READABLE_VERSIONS.has(data.version)) {
-      throw new Error(`${path}: unsupported lockfile version ${data.version} (expected ${VERSION})`);
+      throw new Error(`${path}: unsupported lockfile version ${data.version} (expected 1 or 2)`);
     }
     return new Lockfile(path, data.steps ?? {}, data.version !== VERSION);
   }
@@ -54,6 +54,8 @@ export class Lockfile {
     return this.steps[key]?.resolved;
   }
 
+  // `explain` (Milestone D) will use this to show a step's resolution and confidence without
+  // touching `touched`'s pruning semantics any differently than `get` does.
   getEntry(key: string): { resolved: ResolvedStep; confidence?: number } | undefined {
     this.touched.add(key);
     const entry = this.steps[key];

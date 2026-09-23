@@ -9,8 +9,8 @@ export const PAGE_SOURCED_MIN_CONFIDENCE = 0.75;
 export interface Judgment {
   holds: number;
   evidence?: string;
-  /** Where the evidence lives: the document title is not visible text and is checked differently. */
-  evidenceKind?: 'title' | 'text';
+  /** Where the evidence lives: only 'title' and 'heading' are ever pinned to (see executor.ts). */
+  evidenceKind?: 'title' | 'heading' | 'link' | 'button';
   evidenceConfidence?: number;
 }
 
@@ -141,7 +141,7 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
   const { step, snapshot, values, client, minConfidence } = input;
   const elements = shortlist(snapshot.elements, step.text, MAX_ELEMENTS);
   const valueById: Record<string, string> = Object.fromEntries(values.map((value, i) => [`v${i + 1}`, value]));
-  const pageTextById: Record<string, string> = Object.fromEntries(snapshot.evidence.map((t, i) => [`p${i + 1}`, t]));
+  const pageTextById: Record<string, string> = Object.fromEntries(snapshot.evidence.map((e, i) => [`p${i + 1}`, e.text]));
 
   const state = {
     step: { keyword: step.keyword, text: step.text },
@@ -173,7 +173,10 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
       Object.fromEntries(feasibleForms.map((form) => [form, ASSERTION[form]])),
     );
   }
-  if (elements.length > 0 && values.length > 0) {
+  // Whenever input_text is asked below (a literal or page text to type) and there is a field to
+  // type into, the step may also imply submitting — a page-sourced "search for …" needs this as
+  // much as a quoted one does.
+  if (elements.length > 0 && (values.length > 0 || snapshot.evidence.length > 0)) {
     questions.after_typing = choice(
       'Assume the Gherkin step in `step.text` asks for text to be typed into a field. Once the text is typed, does the step imply submitting it?',
       AFTER_TYPING,
@@ -188,16 +191,15 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
       },
     );
   }
+  const literalOptions = Object.fromEntries(Object.entries(valueById).map(([id, value]) => [id, { literal: value }]));
   if (values.length > 0) {
     // One question per purpose: a generic "which literal is the data?" let `none` look plausible
     // for navigation, because a path can also be read as naming the step's target.
-    const options = Object.fromEntries(Object.entries(valueById).map(([id, value]) => [id, { literal: value }]));
     for (const [id, instructions, none] of VALUE_QUESTIONS) {
-      questions[id] = choice(instructions, { ...options, none });
+      questions[id] = choice(instructions, { ...literalOptions, none });
     }
   }
   if (values.length > 0 || (elements.length > 0 && snapshot.evidence.length > 0)) {
-    const literalOptions = Object.fromEntries(Object.entries(valueById).map(([id, value]) => [id, { literal: value }]));
     const pageTextOptions =
       elements.length > 0 ? Object.fromEntries(Object.entries(pageTextById).map(([id, t]) => [id, { page_text: t }])) : {};
     questions.input_text = choice(INPUT_TEXT_INSTRUCTIONS, { ...literalOptions, ...pageTextOptions, none: INPUT_TEXT_NONE });
@@ -342,7 +344,7 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
 
 /** Does the page satisfy a described expectation — and which page item shows it? */
 export async function judge(client: JevClient, stepText: string, snapshot: Snapshot): Promise<Judgment> {
-  const evidence = snapshot.evidence.map((text, i) => ({ id: `x${i + 1}`, text }));
+  const evidence = snapshot.evidence.map((e, i) => ({ id: `x${i + 1}`, text: e.text, kind: e.kind }));
   const questions: Record<string, unknown> = {
     // Spelling out both answers matters: measured on live pages, it moved true expectations from
     // 0.67-0.88 to 0.95-0.98 while false ones stayed at or below 0.22.
@@ -355,7 +357,7 @@ export async function judge(client: JevClient, stepText: string, snapshot: Snaps
     questions.evidence = choice(
       'Assume the web page in `page` satisfies `expectation`. Which single item of `page.evidence` best shows that it does? Prefer the page title or a heading that names what the expectation is about; choose a link or button only when the expectation is about that control.',
       {
-        ...Object.fromEntries(evidence.map((e) => [e.id, { text: e.text }])),
+        ...Object.fromEntries(evidence.map((e) => [e.id, { text: e.text, kind: e.kind }])),
         none: 'No single item shows it; the expectation is about the page as a whole, an ordering, a count, or something not captured by any listed item.',
       },
     );
@@ -373,7 +375,7 @@ export async function judge(client: JevClient, stepText: string, snapshot: Snaps
   // probability and lowers the distribution's confidence even though any of them is a sound pin.
   // The chosen item's own probability is the better guard against pinning to something incidental.
   return item
-    ? { holds: holds.noul, evidence: item.text, evidenceKind: item.text === snapshot.title ? 'title' : 'text', evidenceConfidence: picked!.probabilities[picked!.choice] }
+    ? { holds: holds.noul, evidence: item.text, evidenceKind: item.kind, evidenceConfidence: picked!.probabilities[picked!.choice] }
     : { holds: holds.noul };
 }
 

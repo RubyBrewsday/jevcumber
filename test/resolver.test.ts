@@ -233,7 +233,14 @@ describe('shortlist', () => {
 });
 
 describe('judge', () => {
-  const snap: Snapshot = { ...SNAP, evidence: ['Login - MyApp', 'Sign in', 'Forgot password?'] };
+  const snap: Snapshot = {
+    ...SNAP,
+    evidence: [
+      { text: 'Login - MyApp', kind: 'title' },
+      { text: 'Sign in', kind: 'heading' },
+      { text: 'Forgot password?', kind: 'link' },
+    ],
+  };
 
   it('reports title evidence as a title', async () => {
     const titled = { ...snap, title: 'Login - MyApp' };
@@ -242,12 +249,21 @@ describe('judge', () => {
   });
   const noul = (p: number) => ({ type: 'noul', noul: p });
 
-  it('asks holds and evidence together over the step and page, and returns both', async () => {
+  it('asks holds and evidence together over the step and page, and returns both, with kind taken from the evidence item', async () => {
     const { client, requests } = fakeClient({ holds: noul(0.93), evidence: answer('x2', 0.9) });
-    expect(await judge(client, 'I see the login page', snap)).toEqual({ holds: 0.93, evidence: 'Sign in', evidenceKind: 'text', evidenceConfidence: 0.9 });
+    expect(await judge(client, 'I see the login page', snap)).toEqual({ holds: 0.93, evidence: 'Sign in', evidenceKind: 'heading', evidenceConfidence: 0.9 });
     expect(requests[0].state).toEqual({
       expectation: 'I see the login page',
-      page: { url: snap.url, title: snap.title, text: snap.text, evidence: [{ id: 'x1', text: 'Login - MyApp' }, { id: 'x2', text: 'Sign in' }, { id: 'x3', text: 'Forgot password?' }] },
+      page: {
+        url: snap.url,
+        title: snap.title,
+        text: snap.text,
+        evidence: [
+          { id: 'x1', text: 'Login - MyApp', kind: 'title' },
+          { id: 'x2', text: 'Sign in', kind: 'heading' },
+          { id: 'x3', text: 'Forgot password?', kind: 'link' },
+        ],
+      },
     });
     expect(requests[0].questions.holds.type).toBe('noul');
     expect(Object.keys(requests[0].questions.evidence.criteria)).toEqual(['x1', 'x2', 'x3', 'none']);
@@ -268,7 +284,7 @@ describe('judge', () => {
 });
 
 describe('resolve: page-sourced values', () => {
-  const snap: Snapshot = { ...SNAP, evidence: ['Michelle Obama', 'Barack Obama'] };
+  const snap: Snapshot = { ...SNAP, evidence: [{ text: 'Michelle Obama', kind: 'heading' }, { text: 'Barack Obama', kind: 'link' }] };
   const fill = { kind: answer('fill'), element: answer('e1') };
 
   it('offers page text as input_text candidates after the literals', async () => {

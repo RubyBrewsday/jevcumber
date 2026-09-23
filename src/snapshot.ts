@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { toLocator } from './locators.js';
 import { mostRelevant } from './relevance.js';
-import type { ElementInfo, LocatorSpec, Snapshot } from './types.js';
+import type { ElementInfo, EvidenceItem, LocatorSpec, Snapshot } from './types.js';
 
 const MAX_TEXT = 8000;
 // Verifying a locator costs browser round-trips, and a page can have thousands of links (a long
@@ -118,7 +118,10 @@ function collect(): { title: string; text: string; elements: RawElement[]; headi
   // Site chrome (menus, sidebars, tables of contents) can fill the whole text budget before the
   // content starts, so read the main landmark when the page has one.
   const content = document.querySelector<HTMLElement>('main, [role=main], article') ?? document.body;
-  const headings = Array.from(document.querySelectorAll('h1, h2, h3')).map((h) => clean((h as HTMLElement).innerText)).filter(Boolean);
+  const headings = Array.from(document.querySelectorAll('h1, h2, h3'))
+    .filter((h) => visible(h))
+    .map((h) => clean((h as HTMLElement).innerText))
+    .filter(Boolean);
   return { title: document.title, text: clean(content?.innerText), elements, headings };
 }
 
@@ -141,16 +144,32 @@ function specsFor(raw: RawElement, repeated: Set<string>): LocatorSpec[] {
 const MAX_EVIDENCE = 40;
 const MAX_EVIDENCE_LENGTH = 80;
 
-// Things a described expectation could be pinned to: what the page says it is about.
-function evidenceOf(raw: { title: string; headings: string[]; elements: RawElement[] }, relevantTo: string): string[] {
-  const items = [
-    raw.title,
-    ...raw.headings,
-    ...raw.elements.filter((e) => e.role === 'link' || e.role === 'button').map((e) => e.name),
-  ]
-    .map((s) => s.trim().slice(0, MAX_EVIDENCE_LENGTH))
-    .filter(Boolean);
-  return mostRelevant([...new Set(items)], relevantTo, (s) => s, MAX_EVIDENCE);
+// Things a described expectation could be pinned to: what the page says it is about. Only the
+// title and headings are ever pinned to (see executor.ts); links and buttons are still sent as
+// evidence because they can settle which item best shows the expectation, or serve as a
+// page-sourced input_text candidate, without being pin-worthy themselves.
+function evidenceOf(raw: { title: string; headings: string[]; elements: RawElement[] }, relevantTo: string): EvidenceItem[] {
+  const items: EvidenceItem[] = [];
+  const title = raw.title.trim().slice(0, MAX_EVIDENCE_LENGTH);
+  if (title) items.push({ text: title, kind: 'title' });
+  for (const heading of raw.headings) {
+    const text = heading.trim();
+    // Dropped rather than truncated: a truncated heading would not `getByRole('heading', {
+    // name, exact: true })` back to itself, so a pin on it could never replay.
+    if (!text || text.length > MAX_EVIDENCE_LENGTH) continue;
+    items.push({ text, kind: 'heading' });
+  }
+  for (const element of raw.elements) {
+    if (element.role !== 'link' && element.role !== 'button') continue;
+    const text = element.name.trim().slice(0, MAX_EVIDENCE_LENGTH);
+    if (!text) continue;
+    items.push({ text, kind: element.role });
+  }
+  // Dedupe by text; the first occurrence (title, then headings, then links/buttons) wins the kind.
+  const byText = new Map<string, EvidenceItem>();
+  for (const item of items) if (!byText.has(item.text)) byText.set(item.text, item);
+  // Title and headings win ties, so a described expectation prefers pin-worthy evidence.
+  return mostRelevant([...byText.values()], relevantTo, (item) => item.text, MAX_EVIDENCE, (item) => item.kind === 'title' || item.kind === 'heading');
 }
 
 const roleKey = (raw: RawElement) => `role:${raw.role}:${raw.name}`;

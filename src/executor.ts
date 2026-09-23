@@ -71,6 +71,9 @@ async function check(page: Page, assertion: Assertion, ctx: ExecuteContext): Pro
     case 'title_contains':
       await expect(page).toHaveTitle(new RegExp(escapeRegExp(assertion.value)), { timeout });
       return {};
+    case 'heading_visible':
+      await expect(page.getByRole('heading', { name: assertion.value, exact: true }).first()).toBeVisible({ timeout });
+      return {};
     case 'url_contains':
       await expect(page).toHaveURL(new RegExp(escapeRegExp(assertion.value)), { timeout });
       return {};
@@ -88,16 +91,18 @@ async function check(page: Page, assertion: Assertion, ctx: ExecuteContext): Pro
       if (judgment.holds < SEMANTIC_THRESHOLD) {
         throw new Error(`Jev judged the expectation unmet (p=${judgment.holds.toFixed(2)}, needs ≥ ${SEMANTIC_THRESHOLD}).`);
       }
-      // Pin to concrete evidence so later runs can replay this step without Jev — but only if that
-      // evidence is really visible, or the pinned check would fail on the very next run.
+      // Pin to concrete evidence so later runs can replay this step without Jev — but only when
+      // it's the page title or a heading (a link or button name is not something a Then step is
+      // really "about"), and only if that evidence is really there, or the pinned check would
+      // fail on the very next run.
       if (judgment.evidence && (judgment.evidenceConfidence ?? 0) >= PIN_MIN_CONFIDENCE) {
         if (judgment.evidenceKind === 'title') {
           if ((await page.title()).includes(judgment.evidence)) {
             return { pinned: { form: 'title_contains', value: judgment.evidence, pinned: true }, confidence: judgment.evidenceConfidence };
           }
-        } else {
-          const visible = await page.getByText(judgment.evidence, { exact: true }).first().isVisible().catch(() => false);
-          if (visible) return { pinned: { form: 'text_visible', value: judgment.evidence, pinned: true }, confidence: judgment.evidenceConfidence };
+        } else if (judgment.evidenceKind === 'heading') {
+          const visible = await page.getByRole('heading', { name: judgment.evidence, exact: true }).first().isVisible().catch(() => false);
+          if (visible) return { pinned: { form: 'heading_visible', value: judgment.evidence, pinned: true }, confidence: judgment.evidenceConfidence };
         }
       }
       return {};
