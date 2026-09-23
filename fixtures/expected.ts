@@ -35,4 +35,6 @@ export const RESOLVED: Record<string, ResolvedStep> = {
   'I fill in the new todo field with the greeting on the page': { kind: 'fill', locator: newTodo, value: 'Welcome, dana' },
   'I click "Add"': { kind: 'click', locator: add },
   'I should see "dana"': sees('dana'),
+  'I click the link that signs me out': { kind: 'click', locator: { by: 'role', role: 'link', name: 'Sign out' } },
+  'I should see "Sign in"': sees('Sign in'),
 };

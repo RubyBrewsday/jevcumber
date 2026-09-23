@@ -151,13 +151,17 @@ done by the official `@cucumber/gherkin`.
 - **Two kinds of `Then`.** Quoted text, a named control, or a URL fragment becomes a fast Playwright
   assertion that is cached and replayed: `Then I should see "Welcome"`, `Then the "Save" button is
   visible`, `Then the URL should contain "/todos"`. A *described* expectation —
-  `Then I see an article about bagels` — is judged by Jev on the first run and then **pinned** to the
-  page evidence that showed it (the article's heading or the page title): later runs replay that as a
+  `Then I see an article about bagels` — is judged by Jev on the first run and then **pinned** to
+  the page title or a heading (the article's heading or the page title): later runs replay that as a
   plain check, frozen or not. Only expectations with no single piece of evidence ("the list is sorted
-  by date") stay live-judged, and those need the key and can't run under `--frozen`.
+  by date"), or whose best evidence is a link or button name rather than a title or heading, stay
+  live-judged, and those need the key and can't run under `--frozen`. A replayed pinned step that
+  fails is re-judged live on a normal run — a real regression fails, a heading rewrite heals — but
+  never under `--frozen`, where a failing pin is just a failure.
 - **Values can be described, not just quoted.** `When I fill in the new todo with the greeting on the
   page` picks the text from the page's headings and links. Because the step gave less, jevcumber asks
-  for higher confidence (0.75) before acting on a page-sourced value.
+  for higher confidence (0.75) before acting on a page-sourced value. Page-sourced values are fixed
+  in the lockfile the first time they resolve; if the page text changes, re-run with `--update`.
 - **An empty literal is ignored**, so a step can't clear a field with `""`.
 
 What a step can do today: navigate, click, fill (optionally submitting), select from a dropdown,
@@ -174,7 +178,8 @@ Test your own app, or sites that permit automation.
 For each step that is **not** replayed from the lockfile, jevcumber sends Jev: the step text and its
 literals, the scenario name and earlier step texts, the page URL and title, the page's interactive
 elements (role, name, current value — **never the value of a password field**), and up to 8 000
-characters of visible page text.
+characters of visible page text. Page headings and link/button names are also sent as evidence — to
+judge and pin a described `Then`, and as page-text candidates for a described value or target.
 
 Literals in your steps — including a password you write in a step — live in your `.feature` file and
 are stored in the lockfile too, so use throwaway test credentials. Under `--frozen`, nothing is sent
