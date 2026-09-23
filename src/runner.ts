@@ -228,12 +228,13 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
     }
     exit(130);
   };
-  process.once('SIGINT', onSigint);
-
   const launch = options.launch ?? (() => chromium.launch({ headless: !options.headed }));
-  const browser = await launch();
   const ordered: ScenarioResult[] = new Array(scenarios.length);
+  // Registered inside the try so a failed launch still removes the listener in the finally.
+  process.once('SIGINT', onSigint);
+  let browser: Awaited<ReturnType<typeof launch>>;
   try {
+    browser = await launch();
     try {
       options.reporter.start?.(scenarios);
 
