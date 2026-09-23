@@ -36,6 +36,18 @@ describe('consoleReporter', () => {
     reporter.step({ step: { keyword: 'When', text: 'step 0' }, status: 'passed', note: 'pinned to "X"' });
     expect(lines).toContain('    ✓ When step 0 (pinned to "X")');
   });
+
+  it('prints the evidence path after the detail lines', () => {
+    const lines: string[] = [];
+    const reporter = consoleReporter((line) => lines.push(line));
+    reporter.step({
+      step: { keyword: 'Then', text: 'step 0' },
+      status: 'failed',
+      detail: 'boom',
+      evidenceDir: 'jevcumber-report/a/b/1-failed',
+    });
+    expect(lines.indexOf('        evidence: jevcumber-report/a/b/1-failed')).toBeGreaterThan(lines.indexOf('        boom'));
+  });
 });
 
 describe('exitCode', () => {

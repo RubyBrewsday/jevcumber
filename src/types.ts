@@ -75,6 +75,7 @@ export interface StepResult {
   status: StepStatus;
   detail?: string;
   note?: string;
+  evidenceDir?: string;
 }
 
 export interface ExecuteResult {

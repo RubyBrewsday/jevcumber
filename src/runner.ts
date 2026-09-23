@@ -1,12 +1,15 @@
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { chromium, type Page } from '@playwright/test';
 import { extractValues } from './candidates.js';
+import { captureStep, scenarioDir, stepDir } from './evidence.js';
 import { actionLocators, execute } from './executor.js';
 import { loadFeatures } from './gherkin.js';
 import { toLocator } from './locators.js';
 import { Lockfile, lockPathFor, stepKey } from './lockfile.js';
 import { createClient, judge, resolve, type JevClient } from './resolver.js';
 import { snapshot } from './snapshot.js';
-import type { Assertion, ExecuteResult, Mode, ResolveOutcome, ResolvedStep, Scenario, ScenarioResult, Step, StepResult } from './types.js';
+import type { Assertion, ExecuteResult, Mode, ResolveOutcome, ResolvedStep, Scenario, ScenarioResult, Snapshot, Step, StepResult } from './types.js';
 
 const VALIDATE_TIMEOUT = 2000;
 
@@ -16,7 +19,7 @@ export interface ScenarioDeps {
   resolve(step: Step, previousSteps: string[]): Promise<ResolveOutcome>;
   isValid(resolved: ResolvedStep): Promise<boolean>;
   execute(resolved: ResolvedStep, step: Step): Promise<ExecuteResult | void>;
-  onStep?(result: StepResult): void;
+  onStep?(result: StepResult): void | Promise<void>;
 }
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -103,7 +106,7 @@ export async function runScenario(scenario: Scenario, deps: ScenarioDeps): Promi
     const result = await runStep(step, index);
     if (result.status !== 'passed' && result.status !== 'healed') skipping = true;
     results.push(result);
-    deps.onStep?.(result);
+    await deps.onStep?.(result);
   }
   return results;
 }
@@ -122,6 +125,8 @@ export interface RunOptions {
   minConfidence: number;
   tags?: string;
   reporter: Reporter;
+  reportDir?: string;
+  trace: boolean;
 }
 
 async function isValid(page: Page, resolved: ResolvedStep): Promise<boolean> {
@@ -155,21 +160,26 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
       for (const scenario of scenarios) {
         options.reporter.scenarioStart(scenario);
         const context = await browser.newContext();
+        if (options.trace) await context.tracing.start({ screenshots: true, snapshots: true });
         try {
           const page = await context.newPage();
+          let lastSnapshot: Snapshot | undefined;
           const steps = await runScenario(scenario, {
             mode: options.mode,
             lock: lockFor(scenario.uri),
-            resolve: async (step, previousSteps) =>
-              resolve({
+            resolve: async (step, previousSteps) => {
+              const snap = await snapshot(page, { relevantTo: step.text });
+              lastSnapshot = snap;
+              return resolve({
                 step,
                 scenarioName: scenario.name,
                 previousSteps,
-                snapshot: await snapshot(page, { relevantTo: step.text }),
+                snapshot: snap,
                 values: extractValues(step),
                 client: getClient(),
                 minConfidence: options.minConfidence,
-              }),
+              });
+            },
             isValid: (resolved) => isValid(page, resolved),
             execute: (resolved, step) =>
               execute(page, resolved, {
@@ -177,9 +187,23 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
                 stepText: step.text,
                 judge: frozen ? undefined : async (text) => judge(getClient(), text, await snapshot(page, { elements: false, relevantTo: text })),
               }),
-            onStep: (result) => options.reporter.step(result),
+            onStep: async (result) => {
+              const failing = result.status === 'failed' || result.status === 'ambiguous' || result.status === 'undefined';
+              if (failing && options.reportDir) {
+                const dir = stepDir(options.reportDir, scenario, scenario.steps.indexOf(result.step), result.status);
+                await captureStep(page, dir, lastSnapshot);
+                result.evidenceDir = dir;
+              }
+              options.reporter.step(result);
+            },
           });
           results.push({ scenario, steps });
+          if (options.trace) {
+            const passed = steps.every((s) => s.status === 'passed' || s.status === 'healed');
+            const dir = scenarioDir(options.reportDir ?? 'jevcumber-report', scenario);
+            mkdirSync(dir, { recursive: true });
+            await context.tracing.stop(passed ? {} : { path: join(dir, 'trace.zip') });
+          }
         } finally {
           await context.close();
         }

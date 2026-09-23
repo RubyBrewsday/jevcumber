@@ -173,6 +173,18 @@ describe('runScenario', () => {
     expect(seen).toEqual(['passed', 'passed', 'passed']);
   });
 
+  it('awaits an async onStep hook', async () => {
+    const seen: string[] = [];
+    const { deps } = harness({
+      onStep: async (r) => {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+        seen.push(r.status);
+      },
+    });
+    await runScenario(scenario, deps);
+    expect(seen).toEqual(['passed', 'passed', 'passed']);
+  });
+
   it('pins a described expectation: writes the pinned assertion to the lockfile and notes it', async () => {
     const semantic: ResolvedStep = { kind: 'assert', assertion: { form: 'semantic' } };
     const pinned = { form: 'text_visible', value: 'Michelle Obama', pinned: true } as const;
@@ -270,6 +282,7 @@ describe('runAll', () => {
       headed: false,
       minConfidence: 0.6,
       reporter,
+      trace: false,
     });
     expect(results).toEqual([]);
     expect(calls).toEqual([]);
