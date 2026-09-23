@@ -178,6 +178,9 @@ done by the official `@cucumber/gherkin`.
 
 ## Writing steps Jev can resolve
 
+See the [cookbook](https://jevcumber.dev/cookbook.html) for every step phrasing verified against Jev
+in this repo's own test suite, grouped by what it does.
+
 - **Put data in quotes.** Jev selects values, it never invents them:
   `I fill in the email field with "alice@example.com"`.
 - **Navigate with a literal URL or path.** `Given I am on https://example.com/login`,

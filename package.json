@@ -34,7 +34,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "jevcumber": "npm run build && node dist/cli.js",
-    "deploy:site": "wrangler deploy"
+    "cookbook": "tsx scripts/cookbook.ts",
+    "deploy:site": "npm run cookbook && wrangler deploy"
   },
   "dependencies": {
     "@cucumber/gherkin": "^42.0.1",
