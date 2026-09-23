@@ -4,7 +4,7 @@ import { actionLocators, execute } from './executor.js';
 import { loadFeatures } from './gherkin.js';
 import { toLocator } from './locators.js';
 import { Lockfile, lockPathFor, stepKey } from './lockfile.js';
-import { createClient, resolve, semanticCheck, type JevClient } from './resolver.js';
+import { createClient, judge, resolve, type JevClient } from './resolver.js';
 import { snapshot } from './snapshot.js';
 import type { Mode, ResolveOutcome, ResolvedStep, Scenario, ScenarioResult, Step, StepResult } from './types.js';
 
@@ -151,7 +151,7 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
               execute(page, resolved, {
                 baseUrl: options.baseUrl,
                 stepText: step.text,
-                semantic: frozen ? undefined : async (text) => semanticCheck(getClient(), text, await snapshot(page, { elements: false })),
+                semantic: frozen ? undefined : async (text) => (await judge(getClient(), text, await snapshot(page, { elements: false }))).holds,
               }),
             onStep: (result) => options.reporter.step(result),
           });

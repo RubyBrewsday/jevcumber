@@ -6,7 +6,7 @@ import { RESOLVED } from '../fixtures/expected.js';
 import { extractValues } from '../src/candidates.js';
 import { execute } from '../src/executor.js';
 import { parseFeature } from '../src/gherkin.js';
-import { createClient, resolve, semanticCheck, type JevClient } from '../src/resolver.js';
+import { createClient, judge, resolve, type JevClient } from '../src/resolver.js';
 import { snapshot } from '../src/snapshot.js';
 
 const FEATURES = ['fixtures/features/login.feature', 'fixtures/eval/live-only.feature'];
@@ -74,7 +74,7 @@ describe.skipIf(!process.env.TYPESAFE_API_KEY)('Jev resolves the fixture steps t
         await execute(page, expected, {
           baseUrl: server.url,
           stepText: step.text,
-          semantic: async (text) => semanticCheck(real, text, await snapshot(page, { elements: false })),
+          semantic: async (text) => (await judge(real, text, await snapshot(page, { elements: false }))).holds,
         });
       }
       await context.close();
