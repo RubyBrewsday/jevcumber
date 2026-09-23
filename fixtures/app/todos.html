@@ -7,6 +7,7 @@
 </form>
 <p><a href="/login">Sign out</a></p>
 <label>Avatar <input type="file"></label>
+<label><input type="checkbox"> Remind me</label> <label>Priority <select><option>Low</option><option>High</option></select></label>
 <ul id="list"></ul>
 <script>
   const user = new URLSearchParams(location.search).get('user') ?? 'stranger';

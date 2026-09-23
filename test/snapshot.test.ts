@@ -50,6 +50,15 @@ describe('snapshot', () => {
     expect(byName['Photo'].value).toBeUndefined();
   });
 
+  it('names a control wrapped in its label by the label text only, not the options', async () => {
+    const p = await browser.newPage();
+    await p.setContent('<label>Priority <select><option>Low</option><option>High</option></select></label><label>Notes <textarea>draft</textarea></label>');
+    const names = Object.fromEntries((await snapshot(p)).elements.map((e) => [e.name, e]));
+    expect(names['Priority']).toMatchObject({ role: 'combobox', locator: { by: 'role', role: 'combobox', name: 'Priority' } });
+    expect(names['Notes']).toMatchObject({ role: 'textbox' });
+    await p.close();
+  });
+
   it('falls through to the label locator for password inputs and never exposes their value', async () => {
     const { elements } = await snapshot(page);
     const password = elements.find((e) => e.name === 'Password')!;

@@ -6,6 +6,7 @@ import { availableParallelism } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { Command, InvalidArgumentError } from 'commander';
 import { findConfigFile, loadConfig } from './config.js';
+import { explain } from './explain.js';
 import { exitCode } from './reporter.js';
 import { createReporters, type ReporterName } from './reporters/index.js';
 import { runAll } from './runner.js';
@@ -53,8 +54,37 @@ function installBrowser(extraArgs: string[]): number {
   return result.status ?? 1;
 }
 
+// Prints, for every scenario step, what its lockfile entry resolves to (no browser, no API).
+async function runExplain(args: string[]): Promise<number> {
+  const sub = new Command()
+    .name('jevcumber explain')
+    .argument('<paths...>', 'feature files or directories')
+    .option('--tags <expr>', 'cucumber tag expression, e.g. "@smoke and not @wip"')
+    .exitOverride();
+  try {
+    sub.parse(args, { from: 'user' });
+  } catch (error) {
+    return (error as { exitCode?: number }).exitCode ?? 1;
+  }
+  try {
+    // Same precedence as the main run: an explicit --tags wins; otherwise fall back to the
+    // nearest jevcumber.config.js/.mjs found walking up from the cwd.
+    let tags: string | undefined = sub.opts().tags;
+    if (tags === undefined) {
+      const config = await loadConfig(findConfigFile(process.cwd()));
+      tags = config.tags;
+    }
+    return explain(sub.args, tags, (line) => console.log(line));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`error: ${message}\n`);
+    return 1;
+  }
+}
+
 export async function main(argv: string[]): Promise<number> {
   if (argv[0] === 'install-browser') return installBrowser(argv.slice(1));
+  if (argv[0] === 'explain') return await runExplain(argv.slice(1));
 
   const program = new Command()
     .name('jevcumber')
@@ -78,10 +108,15 @@ export async function main(argv: string[]): Promise<number> {
       'number of scenarios to run concurrently (default: available CPUs under --frozen, capped at 4 otherwise for Jev\'s rate limits; 1 with --headed)',
       parseWorkers,
     )
+    .option('--record-eval <dir>', 'record every Jev exchange (sent, received, outcome) under this directory, for offline reproduction')
     .option('--config <path>', 'path to a jevcumber.config.js/.mjs (default: the nearest one found walking up from cwd)')
     .option('--reporter <name>', 'reporter to use (console, json, junit); repeatable', collect, [] as string[])
     .option('--output <file>', 'output file for the json/junit reporters (default under --report-dir)')
-    .addHelpText('after', '\nFirst time? Run `jevcumber install-browser` to download the Chromium build jevcumber drives.')
+    .addHelpText(
+      'after',
+      '\nFirst time? Run `jevcumber install-browser` to download the Chromium build jevcumber drives.' +
+        '\nRun `jevcumber explain <paths...>` to see what each step\'s lockfile entry resolves to, with no browser.',
+    )
     .exitOverride();
 
   try {
@@ -156,6 +191,7 @@ export async function main(argv: string[]): Promise<number> {
       trace: options.trace,
       workers,
       hooks: config.hooks,
+      recordEval: options.recordEval,
     });
     if (results.length === 0) {
       console.error('error: no scenarios found');

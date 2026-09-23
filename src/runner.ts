@@ -8,7 +8,8 @@ import { actionLocators, execute } from './executor.js';
 import { loadFeatures } from './gherkin.js';
 import { toLocator } from './locators.js';
 import { Lockfile, lockPathFor, stepKey } from './lockfile.js';
-import { createClient, judge, resolve, type JevClient } from './resolver.js';
+import { recordEval } from './recorder.js';
+import { createClient, judge, resolve, type JevClient, type JevExchange } from './resolver.js';
 import { snapshot } from './snapshot.js';
 import type { Reporter } from './reporters/index.js';
 import type { Assertion, ExecuteResult, Mode, ResolveOutcome, ResolvedStep, Scenario, ScenarioResult, Snapshot, Step, StepResult } from './types.js';
@@ -18,12 +19,13 @@ const VALIDATE_TIMEOUT = 2000;
 export interface ScenarioDeps {
   mode: Mode;
   lock: Lockfile;
-  resolve(step: Step, previousSteps: string[]): Promise<ResolveOutcome>;
+  resolve(step: Step, previousSteps: string[], index: number): Promise<ResolveOutcome>;
   isValid(resolved: ResolvedStep): Promise<boolean>;
   execute(resolved: ResolvedStep, step: Step): Promise<ExecuteResult | void>;
   /** Called at the very start of each step, before the cache is consulted. Lets the caller clear
-   *  any per-step state (e.g. the last Jev snapshot) so a skipped resolve doesn't reuse stale data. */
-  beforeStep?(): void | Promise<void>;
+   *  any per-step state (e.g. the last Jev snapshot) so a skipped resolve doesn't reuse stale data,
+   *  and know which step is current for callbacks (e.g. judge) that execute() doesn't index itself. */
+  beforeStep?(index: number): void | Promise<void>;
   onStep?(result: StepResult, index: number): void | Promise<void>;
   /** Runs once before the first step. A throw fails every step (as a synthetic "beforeScenario
    *  hook" step) without ever calling resolve(). */
@@ -52,7 +54,7 @@ export async function runScenario(scenario: Scenario, deps: ScenarioDeps): Promi
   };
 
   const runStepInner = async (step: Step, index: number): Promise<Omit<StepResult, 'durationMs'>> => {
-    await deps.beforeStep?.();
+    await deps.beforeStep?.(index);
     const key = stepKey(scenario, index);
     deps.lock.touch(key); // a run must not prune an entry for a step it started, even if it never resolves
     if (skipping) {
@@ -84,7 +86,7 @@ export async function runScenario(scenario: Scenario, deps: ScenarioDeps): Promi
     } else {
       let outcome: ResolveOutcome;
       try {
-        outcome = await deps.resolve(step, scenario.steps.slice(0, index).map((s) => s.text));
+        outcome = await deps.resolve(step, scenario.steps.slice(0, index).map((s) => s.text), index);
       } catch (error) {
         return { step, status: 'failed', detail: message(error) };
       }
@@ -187,6 +189,9 @@ export interface RunOptions {
    *  a headed run against a single visible browser window can't usefully show two scenarios at once. */
   workers: number;
   hooks?: ConfigHooks;
+  /** Directory to record every Jev exchange (what was sent, what came back, and the outcome) for
+   *  offline reproduction. Never written to under `--frozen`, since no Jev calls happen. */
+  recordEval?: string;
   /** Test seam: how to obtain the Playwright browser. Defaults to `chromium.launch`. */
   launch?: () => Promise<Browser>;
   /** Test seam: how a SIGINT during the run terminates the process. Defaults to `process.exit`. */
@@ -217,6 +222,15 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
   };
 
   let completed = false;
+  // Warn at most once per run when --record-eval can't write its files (e.g. a bad or blocked
+  // directory), rather than once per Jev call, which would otherwise spam stderr for the whole run.
+  let recordEvalWarned = false;
+  const warnIfRecordEvalFailed = (wrote: boolean) => {
+    if (!wrote && !recordEvalWarned) {
+      recordEvalWarned = true;
+      process.stderr.write(`warning: could not write --record-eval files under ${options.recordEval}\n`);
+    }
+  };
 
   // Ctrl-C mid-run must not lose whatever Jev has already resolved: save every lockfile
   // (unpruned — the run never got the chance to finish touching every entry, so pruning here
@@ -250,21 +264,47 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
         try {
           const page = await context.newPage();
           let lastSnapshot: Snapshot | undefined;
+          // beforeStep sets this for every step (cached or not), so the judge callback below —
+          // which execute() invokes without an index of its own — knows which step it's judging.
+          let currentIndex = 0;
           const steps = await runScenario(scenario, {
             mode: options.mode,
             lock: lockFor(scenario.uri),
-            resolve: async (step, previousSteps) => {
+            resolve: async (step, previousSteps, index) => {
               const snap = await snapshot(page, { relevantTo: step.text });
               lastSnapshot = snap;
-              return resolve({
-                step,
-                scenarioName: scenario.name,
-                previousSteps,
-                snapshot: snap,
-                values: extractValues(step),
-                client: getClient(),
-                minConfidence: options.minConfidence,
-              });
+              let exchange: JevExchange | undefined;
+              let outcome: ResolveOutcome | undefined;
+              let caught: unknown;
+              try {
+                outcome = await resolve({
+                  step,
+                  scenarioName: scenario.name,
+                  previousSteps,
+                  snapshot: snap,
+                  values: extractValues(step),
+                  client: getClient(),
+                  minConfidence: options.minConfidence,
+                  onRequest: options.recordEval ? (e) => (exchange = e) : undefined,
+                });
+                return outcome;
+              } catch (error) {
+                caught = error;
+                throw error;
+              } finally {
+                // Record whenever onRequest fired, even if resolve() threw afterwards (e.g. a
+                // malformed Jev response): the exchange that caused the failure is exactly what's
+                // needed to reproduce it offline.
+                if (options.recordEval && exchange) {
+                  warnIfRecordEvalFailed(
+                    recordEval(options.recordEval, scenario, index, 'resolve', {
+                      step,
+                      exchange,
+                      outcome: outcome ?? { error: message(caught) },
+                    }),
+                  );
+                }
+              }
             },
             isValid: (resolved) => isValid(page, resolved),
             execute: (resolved, step) =>
@@ -272,13 +312,44 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
                 baseUrl: options.baseUrl,
                 stepText: step.text,
                 featureDir: dirname(resolvePath(scenario.uri)),
-                judge: frozen ? undefined : async (text) => judge(getClient(), text, await snapshot(page, { elements: false, relevantTo: text })),
+                judge: frozen
+                  ? undefined
+                  : async (text) => {
+                      let exchange: JevExchange | undefined;
+                      let judgment: Awaited<ReturnType<typeof judge>> | undefined;
+                      let caught: unknown;
+                      try {
+                        judgment = await judge(
+                          getClient(),
+                          text,
+                          await snapshot(page, { elements: false, relevantTo: text }),
+                          options.recordEval ? (e) => (exchange = e) : undefined,
+                        );
+                        return judgment;
+                      } catch (error) {
+                        caught = error;
+                        throw error;
+                      } finally {
+                        // Same as the resolve() wrapper above: record whenever onRequest fired,
+                        // even when judge() threw afterwards.
+                        if (options.recordEval && exchange) {
+                          warnIfRecordEvalFailed(
+                            recordEval(options.recordEval, scenario, currentIndex, 'judge', {
+                              step,
+                              exchange,
+                              outcome: judgment ?? { error: message(caught) },
+                            }),
+                          );
+                        }
+                      }
+                    },
               }),
             // A step that never calls resolve() (a cached hit, or --frozen) leaves no snapshot of
             // its own: clearing this at the start of every step stops a failing step from being
             // captured against the previous step's stale snapshot.
-            beforeStep: () => {
+            beforeStep: (index) => {
               lastSnapshot = undefined;
+              currentIndex = index;
             },
             onStep: async (result, index) => {
               const failing = result.status === 'failed' || result.status === 'ambiguous' || result.status === 'undefined';

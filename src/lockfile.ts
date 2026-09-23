@@ -54,8 +54,8 @@ export class Lockfile {
     return this.steps[key]?.resolved;
   }
 
-  // `explain` (Milestone D) will use this to show a step's resolution and confidence without
-  // touching `touched`'s pruning semantics any differently than `get` does.
+  // Used by `explain` to show a step's resolution and confidence without touching `touched`'s
+  // pruning semantics any differently than `get` does.
   getEntry(key: string): { resolved: ResolvedStep; confidence?: number } | undefined {
     this.touched.add(key);
     const entry = this.steps[key];

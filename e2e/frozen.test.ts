@@ -321,4 +321,74 @@ describe('jevcumber --frozen against the fixture app', () => {
       errors.mockRestore();
     }
   });
+
+  it('accepts --record-eval alongside --frozen but writes nothing (no calls to Jev happen)', async () => {
+    const { dir } = workspace();
+    const recordDir = join(dir, 'eval');
+    expect(await main([dir, '--base-url', server.url, '--frozen', '--record-eval', recordDir])).toBe(0);
+    expect(existsSync(recordDir)).toBe(false);
+  });
+
+  it('explain prints each step\'s resolution from the lockfile without touching a browser', async () => {
+    const { dir } = workspace();
+    const logs: string[] = [];
+    const spy = vi.spyOn(console, 'log').mockImplementation((line?: unknown) => {
+      logs.push(String(line ?? ''));
+    });
+    try {
+      expect(await main(['explain', dir])).toBe(0);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(logs.some((l) => l.includes('open "/login"'))).toBe(true);
+  });
+
+  it('explain exits 1 with an error: line for a missing path', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'jevcumber-e2e-'));
+    const errors = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      expect(await main(['explain', join(dir, 'nope')])).toBe(1);
+      expect(errors.mock.calls.flat().join('\n')).toMatch(/^error: /m);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  it('explain exits 1 with an error: line for an unsupported lockfile version', async () => {
+    const { dir, feature } = workspace();
+    writeFileSync(lockPathFor(feature), JSON.stringify({ version: 3, steps: {} }, null, 2));
+    const errors = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      expect(await main(['explain', dir])).toBe(1);
+      expect(errors.mock.calls.flat().join('\n')).toMatch(/error: .*unsupported lockfile version 3/);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  it('explain exits 1 with "no scenarios found" when a tag matches nothing', async () => {
+    const { dir } = workspace();
+    const errors = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      expect(await main(['explain', dir, '--tags', '@nonexistent'])).toBe(1);
+      expect(errors.mock.calls.flat().join('\n')).toMatch(/error: no scenarios found/);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  it('explain honours the config file\'s tags when --tags is not given', async () => {
+    const { dir } = workspace();
+    writeFileSync(join(dir, 'jevcumber.config.mjs'), 'export default { tags: "@nonexistent" };\n');
+    const errors = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    const originalCwd = process.cwd();
+    process.chdir(dir);
+    try {
+      expect(await main(['explain', dir])).toBe(1);
+      expect(errors.mock.calls.flat().join('\n')).toMatch(/error: no scenarios found/);
+    } finally {
+      process.chdir(originalCwd);
+      errors.mockRestore();
+    }
+  });
 });

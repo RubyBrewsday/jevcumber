@@ -1,0 +1,299 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>jevcumber cookbook — step phrasings Jev resolves</title>
+<meta name="description" content="Every step phrasing verified against Jev in jevcumber's own test suite, grouped by what it does.">
+<link rel="canonical" href="https://jevcumber.dev/cookbook">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🥒</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bagel+Fat+One&family=Hanken+Grotesk:ital,wght@0,400;0,500;0,700;1,400&family=Martian+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #f3edd7;
+  --paper-deep: #e9e0c2;
+  --card: #fbf8ec;
+  --ink: #17301b;
+  --ink-soft: #46604a;
+  --pickle: #2f5d34;
+  --pickle-bright: #4f8a3c;
+  --brine: #c9d66b;
+  --mustard: #e2b13c;
+  --tomato: #c4462d;
+  --rule: #17301b26;
+  --display: "Bagel Fat One", "Cooper Black", serif;
+  --body: "Hanken Grotesk", system-ui, sans-serif;
+  --mono: "Martian Mono", ui-monospace, monospace;
+}
+* { box-sizing: border-box; margin: 0; }
+html { scroll-behavior: smooth; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font: 400 18px/1.6 var(--body);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; }
+.wrap { width: min(1180px, 100% - 40px); margin-inline: auto; }
+code, pre, .mono { font-family: var(--mono); }
+code { font-size: .82em; background: var(--paper-deep); padding: .12em .4em; border-radius: 4px; }
+
+nav { display: flex; align-items: center; justify-content: space-between; padding: 22px 0; }
+.mark { font: 400 28px/1 var(--display); color: var(--pickle); text-decoration: none; letter-spacing: .01em; }
+.mark span { display: inline-block; transform: rotate(-18deg) translateY(2px); margin-right: 4px; }
+nav ul { display: flex; gap: 26px; list-style: none; padding: 0; font-size: 15px; font-weight: 500; }
+nav ul a { text-decoration: none; border-bottom: 2px solid transparent; padding-bottom: 2px; transition: border-color .2s; }
+nav ul a:hover { border-color: var(--mustard); }
+
+.eyebrow { font: 600 11.5px/1.5 var(--mono); letter-spacing: .16em; text-transform: uppercase; color: var(--ink-soft); display: flex; gap: 14px; align-items: center; margin-top: 30px; }
+.eyebrow::before { content: ""; width: 34px; height: 2px; background: var(--mustard); }
+h1 { font: 400 clamp(38px, 5.4vw, 60px)/1.02 var(--display); color: var(--pickle); margin: 18px 0 20px; }
+.lede { font-size: 19px; max-width: 46em; color: var(--ink-soft); margin-bottom: 20px; }
+.lede strong { color: var(--ink); font-weight: 700; }
+
+.card { background: var(--card); border: 2px solid var(--ink); border-radius: 10px; box-shadow: 8px 8px 0 var(--ink); padding: 28px 30px 32px; margin-top: 48px; }
+h2 { font: 400 clamp(26px, 3.2vw, 38px)/1 var(--display); color: var(--pickle); margin: 0 0 18px; }
+
+table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+thead th { text-align: left; font: 600 11px/1.4 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); border-bottom: 2px solid var(--ink); padding: 0 12px 10px 0; }
+tbody td { padding: 12px 12px 12px 0; border-bottom: 1px solid var(--rule); vertical-align: top; font-size: 15.5px; }
+tbody tr:last-child td { border-bottom: 0; }
+td, code { overflow-wrap: anywhere; word-break: break-word; }
+thead th:first-child, tbody td:first-child { width: 45%; }
+thead th:last-child, tbody td:last-child { width: 55%; }
+
+.fine { margin: 56px 0 80px; font-size: 15px; color: var(--ink-soft); max-width: 46em; }
+.fine + .fine { margin-top: -40px; }
+
+footer { margin-top: 60px; border-top: 2px solid var(--ink); padding: 30px 0 50px; display: flex; flex-wrap: wrap; gap: 14px 30px; justify-content: space-between; font-size: 14.5px; color: var(--ink-soft); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <nav>
+    <a class="mark" href="/"><span>🥒</span>jevcumber</a>
+    <ul>
+      <li><a href="/">Home</a></li>
+      <li><a href="https://github.com/RubyBrewsday/jevcumber">GitHub ↗</a></li>
+    </ul>
+  </nav>
+
+  <p class="eyebrow">The cookbook</p>
+  <h1>Step phrasings Jev resolves.</h1>
+  <p class="lede">Every row here is a step phrasing pulled straight from jevcumber's own test suite — the fixtures and examples it is evaluated against — and the resolution Jev is verified to produce for it. <strong>These aren't hypothetical.</strong> Use them as a starting point for your own <code>.feature</code> files.</p>
+
+      <section class="card">
+        <h2>Navigate</h2>
+        <table>
+          <thead><tr><th>Step</th><th>What jevcumber does</th></tr></thead>
+          <tbody>
+        <tr><td><code>I am on &quot;/login&quot;</code></td><td>open &quot;/login&quot;</td></tr>
+        <tr><td><code>I am on https://en.wikipedia.org</code></td><td>open &quot;https://en.wikipedia.org&quot;</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>Fill</h2>
+        <table>
+          <thead><tr><th>Step</th><th>What jevcumber does</th></tr></thead>
+          <tbody>
+        <tr><td><code>I fill in the email field with &quot;alice@example.com&quot;</code></td><td>type &quot;alice@example.com&quot; into textbox &quot;Email&quot;</td></tr>
+        <tr><td><code>I fill in the password field with &quot;secret&quot;</code></td><td>type &quot;secret&quot; into field labelled &quot;Password&quot;</td></tr>
+        <tr><td><code>I fill in the new todo field with &quot;Buy milk&quot;</code></td><td>type &quot;Buy milk&quot; into textbox &quot;New todo&quot;</td></tr>
+        <tr><td><code>I fill in the password field with &quot;wrong&quot;</code></td><td>type &quot;wrong&quot; into field labelled &quot;Password&quot;</td></tr>
+        <tr><td><code>I fill in &quot;Email&quot; with &quot;bob@example.com&quot;</code></td><td>type &quot;bob@example.com&quot; into textbox &quot;Email&quot;</td></tr>
+        <tr><td><code>I fill in &quot;Password&quot; with &quot;secret&quot;</code></td><td>type &quot;secret&quot; into field labelled &quot;Password&quot;</td></tr>
+        <tr><td><code>I fill in &quot;Email&quot; with &quot;dana@example.com&quot;</code></td><td>type &quot;dana@example.com&quot; into textbox &quot;Email&quot;</td></tr>
+        <tr><td><code>I submit &quot;Feed the cat&quot; as a new todo</code></td><td>type &quot;Feed the cat&quot; into textbox &quot;New todo&quot; then press Enter</td></tr>
+        <tr><td><code>I fill in the new todo field with the greeting on the page</code></td><td>type &quot;Welcome, dana&quot; into textbox &quot;New todo&quot;</td></tr>
+        <tr><td><code>I search for &quot;bagel&quot;</code></td><td>type &quot;bagel&quot; into searchbox &quot;Search Wikipedia&quot; then press Enter</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>Click</h2>
+        <table>
+          <thead><tr><th>Step</th><th>What jevcumber does</th></tr></thead>
+          <tbody>
+        <tr><td><code>I click the Log in button</code></td><td>click button &quot;Log in&quot;</td></tr>
+        <tr><td><code>I click the Add button</code></td><td>click button &quot;Add&quot;</td></tr>
+        <tr><td><code>I click &quot;Log in&quot;</code></td><td>click button &quot;Log in&quot;</td></tr>
+        <tr><td><code>I click &quot;Add&quot;</code></td><td>click button &quot;Add&quot;</td></tr>
+        <tr><td><code>I click the link that signs me out</code></td><td>click link &quot;Sign out&quot;</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>Select</h2>
+        <table>
+          <thead><tr><th>Step</th><th>What jevcumber does</th></tr></thead>
+          <tbody>
+        <tr><td><code>I choose &quot;High&quot; as the priority</code></td><td>choose &quot;High&quot; in combobox &quot;Priority&quot;</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>Check</h2>
+        <table>
+          <thead><tr><th>Step</th><th>What jevcumber does</th></tr></thead>
+          <tbody>
+        <tr><td><code>I check the Remind me box</code></td><td>check checkbox &quot;Remind me&quot;</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>Uncheck</h2>
+        <table>
+          <thead><tr><th>Step</th><th>What jevcumber does</th></tr></thead>
+          <tbody>
+        <tr><td><code>I uncheck the Remind me box</code></td><td>uncheck checkbox &quot;Remind me&quot;</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>Press a key</h2>
+        <table>
+          <thead><tr><th>Step</th><th>What jevcumber does</th></tr></thead>
+          <tbody>
+        <tr><td><code>I press Enter in the password field</code></td><td>press Enter (in field labelled &quot;Password&quot;)</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>Hover</h2>
+        <table>
+          <thead><tr><th>Step</th><th>What jevcumber does</th></tr></thead>
+          <tbody>
+        <tr><td><code>I hover over the Sign out link</code></td><td>hover link &quot;Sign out&quot;</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>Clear</h2>
+        <table>
+          <thead><tr><th>Step</th><th>What jevcumber does</th></tr></thead>
+          <tbody>
+        <tr><td><code>I clear the new todo field</code></td><td>clear textbox &quot;New todo&quot;</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>Scroll</h2>
+        <table>
+          <thead><tr><th>Step</th><th>What jevcumber does</th></tr></thead>
+          <tbody>
+        <tr><td><code>I scroll to the Add button</code></td><td>scroll button &quot;Add&quot;</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>Upload</h2>
+        <table>
+          <thead><tr><th>Step</th><th>What jevcumber does</th></tr></thead>
+          <tbody>
+        <tr><td><code>I upload &quot;avatar.png&quot; as the avatar</code></td><td>upload &quot;avatar.png&quot; to field labelled &quot;Avatar&quot;</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>Wait</h2>
+        <table>
+          <thead><tr><th>Step</th><th>What jevcumber does</th></tr></thead>
+          <tbody>
+        <tr><td><code>I wait for &quot;Welcome, dana&quot; to appear</code></td><td>wait for &quot;Welcome, dana&quot;</td></tr>
+        <tr><td><code>I wait 1 second</code></td><td>wait 1 s</td></tr>
+        <tr><td><code>I wait for the page to settle</code></td><td>wait for the page to settle</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>Assert: text visible</h2>
+        <table>
+          <thead><tr><th>Step</th><th>What jevcumber does</th></tr></thead>
+          <tbody>
+        <tr><td><code>I should see &quot;Welcome, alice&quot;</code></td><td>expect text &quot;Welcome, alice&quot; visible</td></tr>
+        <tr><td><code>I should see &quot;Buy milk&quot;</code></td><td>expect text &quot;Buy milk&quot; visible</td></tr>
+        <tr><td><code>I should see &quot;Invalid email or password&quot;</code></td><td>expect text &quot;Invalid email or password&quot; visible</td></tr>
+        <tr><td><code>I should see &quot;Welcome, bob&quot;</code></td><td>expect text &quot;Welcome, bob&quot; visible</td></tr>
+        <tr><td><code>I should see &quot;Feed the cat&quot;</code></td><td>expect text &quot;Feed the cat&quot; visible</td></tr>
+        <tr><td><code>I should see &quot;dana&quot;</code></td><td>expect text &quot;dana&quot; visible</td></tr>
+        <tr><td><code>I should see &quot;Sign in&quot;</code></td><td>expect text &quot;Sign in&quot; visible</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>Assert: text not visible</h2>
+        <table>
+          <thead><tr><th>Step</th><th>What jevcumber does</th></tr></thead>
+          <tbody>
+        <tr><td><code>I should not see &quot;Welcome&quot;</code></td><td>expect text &quot;Welcome&quot; absent</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>Assert: URL contains</h2>
+        <table>
+          <thead><tr><th>Step</th><th>What jevcumber does</th></tr></thead>
+          <tbody>
+        <tr><td><code>the URL should contain &quot;/todos&quot;</code></td><td>expect URL to contain &quot;/todos&quot;</td></tr>
+        <tr><td><code>the URL should contain &quot;/wiki/Bagel&quot;</code></td><td>expect URL to contain &quot;/wiki/Bagel&quot;</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>Assert: title contains</h2>
+        <table>
+          <thead><tr><th>Step</th><th>What jevcumber does</th></tr></thead>
+          <tbody>
+        <tr><td><code>I see an article about bagels</code></td><td>expect title to contain &quot;Bagel - Wikipedia&quot; (pinned)</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>Assert: element visible</h2>
+        <table>
+          <thead><tr><th>Step</th><th>What jevcumber does</th></tr></thead>
+          <tbody>
+        <tr><td><code>the &quot;New todo&quot; field should be visible</code></td><td>expect textbox &quot;New todo&quot; visible</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card">
+        <h2>Assert: judged live by Jev</h2>
+        <table>
+          <thead><tr><th>Step</th><th>What jevcumber does</th></tr></thead>
+          <tbody>
+        <tr><td><code>I see a greeting for dana</code></td><td>judged live by Jev each run</td></tr>
+        <tr><td><code>I see the todos page for dana</code></td><td>judged live by Jev each run</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+  <p class="fine">Quoted data matters: Jev selects the values in your step, it never invents them, so <code>"alice@example.com"</code> resolves and an unquoted description of an email does not. Page-like control names matter too — "the Log in button" or a quoted <code>"Log in"</code> match what's really on the page; a vague description gives Jev nothing to select from. See the <a href="https://github.com/RubyBrewsday/jevcumber#writing-steps-jev-can-resolve">README</a> for the full house rules.</p>
+
+  <footer>
+    <span><a class="mark" style="font-size:20px" href="/"><span>🥒</span>jevcumber</a></span>
+    <span><a href="https://github.com/RubyBrewsday/jevcumber">GitHub</a> · <a href="https://github.com/RubyBrewsday/jevcumber/blob/main/LICENSE">MIT License</a> · <a href="https://docs.typesafe.ai">Jev docs</a></span>
+  </footer>
+</div>
+</body>
+</html>

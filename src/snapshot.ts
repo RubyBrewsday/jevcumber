@@ -67,7 +67,13 @@ function collect(): { title: string; text: string; elements: RawElement[]; headi
       const text = labelledBy.split(/\s+/).map((id) => clean(document.getElementById(id)?.textContent)).join(' ');
       if (clean(text)) return clean(text);
     }
-    if (isFormControl(el) && el.labels?.length) return clean(el.labels[0].textContent);
+    if (isFormControl(el) && el.labels?.length) {
+      // A wrapping <label>Priority <select>…</select></label> must not include the control's own
+      // text (option labels, textarea content): that is not what Playwright's getByLabel matches.
+      const label = el.labels[0].cloneNode(true) as HTMLElement;
+      label.querySelectorAll('select, textarea, input').forEach((control) => control.remove());
+      return clean(label.textContent);
+    }
     return '';
   };
 

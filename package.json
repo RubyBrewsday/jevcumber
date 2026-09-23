@@ -31,10 +31,11 @@
   "scripts": {
     "build": "tsc",
     "prepare": "npm run build",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.scripts.json",
     "test": "vitest run",
     "jevcumber": "npm run build && node dist/cli.js",
-    "deploy:site": "wrangler deploy"
+    "cookbook": "tsx scripts/cookbook.ts",
+    "deploy:site": "npm run cookbook && npx wrangler deploy"
   },
   "dependencies": {
     "@cucumber/gherkin": "^42.0.1",
