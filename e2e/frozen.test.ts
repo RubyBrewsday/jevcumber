@@ -321,4 +321,18 @@ describe('jevcumber --frozen against the fixture app', () => {
       errors.mockRestore();
     }
   });
+
+  it('explain prints each step\'s resolution from the lockfile without touching a browser', async () => {
+    const { dir } = workspace();
+    const logs: string[] = [];
+    const spy = vi.spyOn(console, 'log').mockImplementation((line?: unknown) => {
+      logs.push(String(line ?? ''));
+    });
+    try {
+      expect(await main(['explain', dir])).toBe(0);
+    } finally {
+      spy.mockRestore();
+    }
+    expect(logs.some((l) => l.includes('open "/login"'))).toBe(true);
+  });
 });

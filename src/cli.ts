@@ -6,6 +6,7 @@ import { availableParallelism } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { Command, InvalidArgumentError } from 'commander';
 import { findConfigFile, loadConfig } from './config.js';
+import { explain } from './explain.js';
 import { exitCode } from './reporter.js';
 import { createReporters, type ReporterName } from './reporters/index.js';
 import { runAll } from './runner.js';
@@ -53,8 +54,24 @@ function installBrowser(extraArgs: string[]): number {
   return result.status ?? 1;
 }
 
+// Prints, for every scenario step, what its lockfile entry resolves to (no browser, no API).
+function runExplain(args: string[]): number {
+  const sub = new Command()
+    .name('jevcumber explain')
+    .argument('<paths...>', 'feature files or directories')
+    .option('--tags <expr>', 'cucumber tag expression, e.g. "@smoke and not @wip"')
+    .exitOverride();
+  try {
+    sub.parse(args, { from: 'user' });
+  } catch (error) {
+    return (error as { exitCode?: number }).exitCode ?? 1;
+  }
+  return explain(sub.args, sub.opts().tags, (line) => console.log(line));
+}
+
 export async function main(argv: string[]): Promise<number> {
   if (argv[0] === 'install-browser') return installBrowser(argv.slice(1));
+  if (argv[0] === 'explain') return runExplain(argv.slice(1));
 
   const program = new Command()
     .name('jevcumber')
@@ -81,7 +98,11 @@ export async function main(argv: string[]): Promise<number> {
     .option('--config <path>', 'path to a jevcumber.config.js/.mjs (default: the nearest one found walking up from cwd)')
     .option('--reporter <name>', 'reporter to use (console, json, junit); repeatable', collect, [] as string[])
     .option('--output <file>', 'output file for the json/junit reporters (default under --report-dir)')
-    .addHelpText('after', '\nFirst time? Run `jevcumber install-browser` to download the Chromium build jevcumber drives.')
+    .addHelpText(
+      'after',
+      '\nFirst time? Run `jevcumber install-browser` to download the Chromium build jevcumber drives.' +
+        '\nRun `jevcumber explain <paths...>` to see what each step\'s lockfile entry resolves to, with no browser.',
+    )
     .exitOverride();
 
   try {
