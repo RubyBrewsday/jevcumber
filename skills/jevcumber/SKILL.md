@@ -7,7 +7,9 @@ description: >
   Cucumber, Gherkin, BDD, feature files, or jevcumber, wants browser tests "without writing code",
   or asks to install/configure jevcumber — even if they don't name it. Covers install and upgrade,
   browser and API-key setup, writing steps Jev can resolve, reading ambiguous/undefined results,
-  the lockfile, and CI with --frozen and explain.
+  the lockfile, and CI with --frozen and explain. Not for Playwright/Cypress/Selenium code with
+  hand-written selectors, unit or component tests, load tests, or writing cucumber-js step
+  definitions for non-browser code — those need something else.
 license: MIT
 ---
 

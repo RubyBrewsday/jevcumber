@@ -1,0 +1,82 @@
+[
+  {
+    "query": "we've got a next.js app at localhost:3000 with a signup form (name, email, password, a terms checkbox). can you write a browser test that fills it in and checks we land on /welcome? no selenium/page-object stuff please, keep it simple",
+    "should_trigger": true
+  },
+  {
+    "query": "add a cucumber feature for the checkout flow \u2014 add the \"Blue Hoodie\" to cart, go to checkout, pay with the test card, and confirm the order number shows. our app runs on http://shop.local:8080",
+    "should_trigger": true
+  },
+  {
+    "query": "my jevcumber test in features/login.feature keeps saying '? When I click it (ambiguous)' with candidates button Log in and link Sign up. whats wrong",
+    "should_trigger": true
+  },
+  {
+    "query": "set up jevcumber in this repo so the team can write e2e tests as .feature files, and wire it into our GitHub Actions (we don't want the typesafe key in CI)",
+    "should_trigger": true
+  },
+  {
+    "query": "Write a Gherkin scenario that searches docs.python.org for \"asyncio\" and verifies the asyncio page comes up, and make it run headlessly.",
+    "should_trigger": true
+  },
+  {
+    "query": "i want a smoke test that just opens https://staging.acme-insurance.com, logs in as qa@acme.test / Passw0rd!, and checks the dashboard says 'Good morning'. should run every deploy without any glue code",
+    "should_trigger": true
+  },
+  {
+    "query": "our QA lead writes BDD specs in plain english but nobody has time to implement step definitions. is there a way to run her feature files directly against the app?",
+    "should_trigger": true
+  },
+  {
+    "query": "the lockfile for features/todos.feature keeps changing every run and CI fails with 'No lockfile entry for this step'. how do I make jevcumber deterministic?",
+    "should_trigger": true
+  },
+  {
+    "query": "can you upgrade jevcumber to the latest version here and re-resolve the features after the nav redesign (the 'Account' link is now 'Profile')",
+    "should_trigger": true
+  },
+  {
+    "query": "write an end to end test for the password reset email flow on our rails app \u2014 request reset, open the mailhog link at localhost:8025, set a new password, log in",
+    "should_trigger": true
+  },
+  {
+    "query": "write cucumber-js step definitions for this feature file \u2014 we use @cucumber/cucumber with TypeScript and the World pattern, and the steps need to hit our REST API with supertest",
+    "should_trigger": false
+  },
+  {
+    "query": "add a playwright test (tests/checkout.spec.ts) using page.getByRole locators and the existing fixtures in tests/fixtures.ts for the checkout page",
+    "should_trigger": false
+  },
+  {
+    "query": "our jest unit tests for the Cart reducer are flaky, can you look at src/store/cart.test.ts and fix the timing issue with the async thunk",
+    "should_trigger": false
+  },
+  {
+    "query": "write a pytest suite for the /api/orders endpoint \u2014 auth, pagination, and the 422 on invalid payloads",
+    "should_trigger": false
+  },
+  {
+    "query": "we have a cucumber .feature describing the pricing rules for our billing engine (no UI, it's a pure TS module). implement the step definitions and make the scenarios pass",
+    "should_trigger": false
+  },
+  {
+    "query": "scrape the product names and prices from https://example-store.com/catalog into a CSV, it's about 40 pages",
+    "should_trigger": false
+  },
+  {
+    "query": "the gherkin syntax highlighting in VS Code stopped working for our .feature files, any idea why?",
+    "should_trigger": false
+  },
+  {
+    "query": "use the TypeSafe Jev API to classify incoming support tickets into billing/technical/other in our node backend",
+    "should_trigger": false
+  },
+  {
+    "query": "write a k6 load test that hits the login endpoint with 500 virtual users and reports p95 latency",
+    "should_trigger": false
+  },
+  {
+    "query": "can you add a cypress component test for the DatePicker component with cy.mount",
+    "should_trigger": false
+  }
+]
