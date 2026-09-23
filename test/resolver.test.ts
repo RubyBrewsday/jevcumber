@@ -146,12 +146,23 @@ describe('resolve: mapping answers to steps', () => {
     ['scroll', { kind: answer('scroll'), element: answer('e2') }, [], { kind: 'scroll', locator: SNAP.elements[1].locator }],
     ['upload', { kind: answer('upload'), element: answer('e1'), input_text: answer('v1') }, ['photo.png'], { kind: 'upload', locator: SNAP.elements[0].locator, value: 'photo.png' }],
     ['wait for text', { kind: answer('wait'), expected_text: answer('v1') }, ['Done'], { kind: 'wait', text: 'Done' }],
-    ['wait seconds', { kind: answer('wait'), expected_text: answer('none') }, ['3'], { kind: 'wait', seconds: 3 }],
     ['wait for network', { kind: answer('wait') }, [], { kind: 'wait' }],
   ];
   it.each(cases)('%s', async (_name, answers, values, expected) => {
     const outcome = await resolve(input(when('step'), fakeClient(answers).client, values));
     expect(outcome).toMatchObject({ ok: true, resolved: expected });
+  });
+
+  it('waits for a quoted number as text, not as seconds', async () => {
+    const outcome = await resolve(
+      input(when('I wait for "3" to appear'), fakeClient({ kind: answer('wait'), expected_text: answer('v1') }).client, ['3']),
+    );
+    expect(outcome).toMatchObject({ ok: true, resolved: { kind: 'wait', text: '3' } });
+  });
+
+  it('waits seconds only for a bare number in the step text', async () => {
+    const outcome = await resolve(input(when('I wait 3 seconds'), fakeClient({ kind: answer('wait') }).client, ['3']));
+    expect(outcome).toMatchObject({ ok: true, resolved: { kind: 'wait', seconds: 3 } });
   });
 
   it('caps a numeric wait at 30 seconds', async () => {

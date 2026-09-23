@@ -55,6 +55,16 @@ const KIND = {
 
 const MAX_WAIT_SECONDS = 30;
 
+const QUOTED = /"([^"]+)"|(?<!\w)'([^']+)'(?!\w)/g;
+const BARE_NUMBER = /\b(\d+(?:\.\d+)?)\b/;
+
+/** A number of seconds named outright in the step text, e.g. "I wait 3 seconds" — never inside quotes. */
+function bareWaitSeconds(stepText: string): number | undefined {
+  const unquoted = stepText.replace(QUOTED, (match) => ' '.repeat(match.length));
+  const match = BARE_NUMBER.exec(unquoted);
+  return match ? Number(match[1]) : undefined;
+}
+
 const ASSERTION = {
   text_visible: {
     what: 'The step expects a piece of text content from `values` to appear on the page: a message, heading, or other copy.',
@@ -300,7 +310,7 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
       break;
     }
     case 'wait': {
-      const seconds = values.map(Number).find((n) => Number.isFinite(n) && n > 0);
+      const seconds = bareWaitSeconds(step.text);
       if (seconds !== undefined) {
         resolved = { kind, seconds: Math.min(seconds, MAX_WAIT_SECONDS) };
         break;
