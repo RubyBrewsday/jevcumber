@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- jevcumber: a cucumber slice on a pickle-green tile -->
+  <rect width="64" height="64" rx="14" fill="#2f5d34"/>
+  <circle cx="32" cy="32" r="23" fill="#c9d66b"/>
+  <circle cx="32" cy="32" r="17" fill="#f3edd7"/>
+  <g fill="#8fb04a" stroke="#2f5d34" stroke-width="1.4">
+    <ellipse cx="32.0" cy="21.5" rx="3.2" ry="5.4" transform="rotate(0 32.0 21.5)"/>
+    <ellipse cx="42.0" cy="28.8" rx="3.2" ry="5.4" transform="rotate(72 42.0 28.8)"/>
+    <ellipse cx="38.2" cy="40.5" rx="3.2" ry="5.4" transform="rotate(144 38.2 40.5)"/>
+    <ellipse cx="25.8" cy="40.5" rx="3.2" ry="5.4" transform="rotate(216 25.8 40.5)"/>
+    <ellipse cx="22.0" cy="28.8" rx="3.2" ry="5.4" transform="rotate(288 22.0 28.8)"/>
+  </g>
+  <circle cx="32" cy="32" r="3.4" fill="#2f5d34"/>
+</svg>
