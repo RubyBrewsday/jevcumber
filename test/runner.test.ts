@@ -24,6 +24,8 @@ function harness(overrides: Partial<ScenarioDeps> = {}, seed: Record<number, Res
     lock.set(stepKey(scenario, Number(index)), scenario.steps[Number(index)].text, resolved);
   }
   const calls = { resolve: [] as string[], execute: [] as ResolvedStep[] };
+  const defaultExecute: ScenarioDeps['execute'] = async () => undefined;
+  const rawExecute = overrides.execute ?? defaultExecute;
   const deps: ScenarioDeps = {
     mode: 'default',
     lock,
@@ -32,10 +34,11 @@ function harness(overrides: Partial<ScenarioDeps> = {}, seed: Record<number, Res
       return ok(nav(`/${step.text}`));
     },
     isValid: async () => true,
-    execute: async (resolved) => {
-      calls.execute.push(resolved);
-    },
     ...overrides,
+    execute: async (resolved, step) => {
+      calls.execute.push(resolved);
+      return rawExecute(resolved, step);
+    },
   };
   return { deps, calls, lock, path };
 }
@@ -168,6 +171,51 @@ describe('runScenario', () => {
     const { deps } = harness({ onStep: (r) => seen.push(r.status) });
     await runScenario(scenario, deps);
     expect(seen).toEqual(['passed', 'passed', 'passed']);
+  });
+
+  it('pins a described expectation: writes the pinned assertion to the lockfile and notes it', async () => {
+    const semantic: ResolvedStep = { kind: 'assert', assertion: { form: 'semantic' } };
+    const pinned = { form: 'text_visible', value: 'Michelle Obama', pinned: true } as const;
+    const { deps, lock } = harness({
+      resolve: async () => ({ ok: true, resolved: semantic, confidence: 0.9 }),
+      execute: async (r) => (r.kind === 'assert' && r.assertion.form === 'semantic' ? { pinned } : undefined),
+    });
+    const results = await runScenario(scenario, deps);
+    expect(results[0]).toEqual({ step: scenario.steps[0], status: 'passed', note: 'pinned to "Michelle Obama"' });
+    expect(lock.get(stepKey(scenario, 0))).toEqual({ kind: 'assert', assertion: pinned });
+  });
+
+  it('re-judges a failing pinned assertion and heals it when the expectation still holds', async () => {
+    const stale: ResolvedStep = { kind: 'assert', assertion: { form: 'text_visible', value: 'Old heading', pinned: true } };
+    const fresh = { form: 'text_visible', value: 'New heading', pinned: true } as const;
+    const { deps, lock, calls } = harness(
+      {
+        execute: async (r) => {
+          if (r.kind === 'assert' && r.assertion.form === 'text_visible' && r.assertion.value === 'Old heading') throw new Error('not visible');
+          if (r.kind === 'assert' && r.assertion.form === 'semantic') return { pinned: fresh };
+          return undefined;
+        },
+      },
+      { 0: stale },
+    );
+    const results = await runScenario(scenario, deps);
+    expect(results[0]).toMatchObject({ status: 'healed', note: 'pinned to "New heading"' });
+    expect(calls.resolve).toEqual(['two', 'three']);
+    expect(lock.get(stepKey(scenario, 0))).toEqual({ kind: 'assert', assertion: fresh });
+  });
+
+  it('fails a pinned assertion outright under --frozen', async () => {
+    const stale: ResolvedStep = { kind: 'assert', assertion: { form: 'text_visible', value: 'Old', pinned: true } };
+    const { deps, calls } = harness({ mode: 'frozen', execute: async () => { throw new Error('not visible'); } }, { 0: stale });
+    const results = await runScenario(scenario, deps);
+    expect(results[0]).toMatchObject({ status: 'failed', detail: 'not visible' });
+    expect(calls.execute).toHaveLength(1);
+  });
+
+  it('records the resolution confidence in the lockfile', async () => {
+    const { deps, lock } = harness();
+    await runScenario(scenario, deps);
+    expect(lock.getEntry(stepKey(scenario, 0))?.confidence).toBe(0.9);
   });
 });
 

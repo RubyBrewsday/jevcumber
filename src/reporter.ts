@@ -23,10 +23,10 @@ export function consoleReporter(write: (line: string) => void = console.log): Re
       }
       write(`  Scenario: ${scenario.name}`);
     },
-    step({ step, status, detail }) {
+    step({ step, status, detail, note }) {
       const suffix =
         status === 'healed' ? ' (healed — lockfile updated)' : status === 'ambiguous' || status === 'undefined' ? ` (${status})` : '';
-      write(`    ${MARKS[status]} ${step.keyword} ${step.text}${suffix}`);
+      write(`    ${MARKS[status]} ${step.keyword} ${step.text}${suffix}${note ? ` (${note})` : ''}`);
       if (detail) for (const line of detail.split('\n')) write(`        ${line}`);
     },
     end(results) {

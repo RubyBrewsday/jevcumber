@@ -29,6 +29,13 @@ describe('consoleReporter', () => {
     expect(lines).toContain('    - When step 1');
     expect(lines.at(-1)).toBe('2 scenarios (1 passed, 1 failed) · 4 steps (1 passed, 1 healed, 1 failed, 1 skipped)');
   });
+
+  it('appends a note in parentheses after the status suffix', () => {
+    const lines: string[] = [];
+    const reporter = consoleReporter((line) => lines.push(line));
+    reporter.step({ step: { keyword: 'When', text: 'step 0' }, status: 'passed', note: 'pinned to "X"' });
+    expect(lines).toContain('    ✓ When step 0 (pinned to "X")');
+  });
 });
 
 describe('exitCode', () => {
