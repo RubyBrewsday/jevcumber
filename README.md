@@ -4,6 +4,7 @@
 
 [![npm](https://img.shields.io/npm/v/jevcumber.svg)](https://www.npmjs.com/package/jevcumber)
 [![CI](https://github.com/RubyBrewsday/jevcumber/actions/workflows/ci.yml/badge.svg)](https://github.com/RubyBrewsday/jevcumber/actions/workflows/ci.yml)
+[![skills.sh](https://skills.sh/b/RubyBrewsday/jevcumber)](https://skills.sh/RubyBrewsday/jevcumber)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
 **Write Cucumber tests with just the `.feature` file. No step definitions.**
@@ -236,6 +237,19 @@ Playwright trace per scenario, keeping `trace.zip` only for scenarios that did n
 `npx playwright show-trace trace.zip`); `--no-report` only disables the screenshot/snapshot, so
 `--trace` combined with `--no-report` still writes `trace.zip` under `--report-dir` (or the default
 `jevcumber-report` directory when `--report-dir` isn't given).
+
+## Use it from your coding agent
+
+There's an agent skill in this repo that teaches Claude Code, Cursor, Copilot, Gemini and friends
+to set jevcumber up in a project and write features Jev can resolve:
+
+```bash
+npx skills add RubyBrewsday/jevcumber
+```
+
+Then ask your agent for a browser test in plain words — "add a test that logs in and checks the
+welcome message" — and it will install jevcumber, write the feature, run it, and commit the
+lockfile. The skill lives at [`skills/jevcumber/SKILL.md`](skills/jevcumber/SKILL.md).
 
 ## Some sites block automated browsers
 

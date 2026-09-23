@@ -1,0 +1,47 @@
+{
+  "skill_name": "jevcumber",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "I've got a fresh Node project (empty except package.json) and a little todo app running at http://127.0.0.1:50784 (login at /login; alice@example.com / secret logs in and the todos page greets you by name). Set up jevcumber in this project so the team can write browser tests as feature files, and add a first test for logging in that passes. We'll run these in GitHub Actions too.",
+      "expected_output": "Project-local jevcumber >=0.2.0, scripts, .gitignore, no key in files, a passing login feature with lockfile.",
+      "files": [],
+      "assertions": [
+        "package.json lists jevcumber as a (dev)dependency at version >= 0.2.0 (project-local install), not only a global install",
+        "package.json has npm scripts for the local run and a CI run using --frozen (and ideally explain)",
+        ".gitignore includes jevcumber-report",
+        "No file in the project contains the TypeSafE API key value or an 'export TYPESAFE_API_KEY=' line with a real key; the key is only referenced by name",
+        "A features/*.feature login test exists with a literal URL/path and quoted credentials, and its .lock.json exists",
+        "run.txt shows the login scenario passing"
+      ]
+    },
+    {
+      "id": 1,
+      "prompt": "Add a browser test that searches Wikipedia for \"sourdough\" and checks the article shows up, and make sure it can run in our CI where there's no TypeSafe API key.",
+      "expected_output": "A feature using https://en.wikipedia.org, a 'search for' step, an assertion that replays under --frozen (quoted text/URL, or a pinned described expectation), a lockfile, and a --frozen run demonstrated with the key unset.",
+      "files": [],
+      "assertions": [
+        "Feature starts on https://en.wikipedia.org (literal URL)",
+        "Uses a 'search for \"sourdough\"' style step that submits",
+        "The article check is replayable without the API: quoted text, URL contains, or a pinned title/heading (lockfile entry is not form:'semantic')",
+        "ci.txt shows the run passing with TYPESAFE_API_KEY unset (--frozen or lockfile replay)",
+        "A .lock.json is present in outputs"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "My jevcumber test keeps failing and I don't get why. The feature is at /Users/michaelpoage/Developer/jevcumber-skill-workspace/fixtures/broken.feature and the app is at http://127.0.0.1:50784. Can you fix it so it passes?",
+      "expected_output": "Rewrites 'Given I am on the login page' to a literal URL/path, 'When I log in as alice' into quoted fill/click steps, 'Then it worked' into a concrete check; run passes.",
+      "files": [
+        "fixtures/broken.feature"
+      ],
+      "assertions": [
+        "'Given I am on the login page' replaced with a literal URL/path",
+        "'When I log in as alice' replaced with quoted fill steps and a click on the Log in button",
+        "'Then it worked' replaced with a concrete quoted check (e.g. greeting text or URL)",
+        "Final run output reports 1 scenarios (1 passed)",
+        "notes.md explains that jevcumber selects from page controls and quoted values, so unnamed/unquoted steps cannot resolve"
+      ]
+    }
+  ]
+}
