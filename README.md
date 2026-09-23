@@ -167,9 +167,11 @@ done by the official `@cucumber/gherkin`.
 - **An empty literal is ignored**, so a step can't clear a field with `""`.
 
 What a step can do today: navigate, click, fill (optionally submitting), clear a field, select from a
-dropdown (by label, value, or index), check/uncheck, press a key, hover, scroll to an element, upload
-a file (`I upload "photo.png" as the avatar` — the path is relative to the feature file), wait
-(`I wait for "Done" to appear`, `I wait 3 seconds`, `I wait for the page to settle`), and assert.
+dropdown (by label, by value, or by a 1-based index — "the 2nd option" selects `index: 1`),
+check/uncheck, press a key, hover, scroll a named element into view (page-level scrolling is not
+supported), upload a file (`I upload "photo.png" as the avatar` — the path is relative to the feature
+file; a hidden file input styled behind a button can't be targeted yet), wait (`I wait for "Done" to
+appear`, `I wait 3 seconds`, `I wait for the page to settle`), and assert.
 
 ## When a step fails
 
@@ -179,8 +181,8 @@ For every step that fails, is ambiguous, or is undefined, jevcumber writes what 
 the step. `--report-dir <dir>` moves it, `--no-report` turns it off, and `--trace` also records a
 Playwright trace per scenario, keeping `trace.zip` only for scenarios that did not pass (open it with
 `npx playwright show-trace trace.zip`); `--no-report` only disables the screenshot/snapshot, so
-`--trace` combined with `--no-report` still writes `trace.zip` under the default `jevcumber-report`
-directory.
+`--trace` combined with `--no-report` still writes `trace.zip` under `--report-dir` (or the default
+`jevcumber-report` directory when `--report-dir` isn't given).
 
 ## Some sites block automated browsers
 
@@ -212,7 +214,8 @@ anywhere.
 
 ## Limits (v0.1)
 
-Scenarios run sequentially. No hooks, iframes, file uploads, drag and drop, or multi-tab flows yet.
+Scenarios run sequentially. No hooks, iframes, drag and drop, or multi-tab flows yet. A hidden file
+input styled behind a button can't be targeted for upload yet either.
 One action per step. Web UIs only.
 
 ## Development
