@@ -86,7 +86,7 @@ function collectRowsFromFeatures(): Row[] {
 function collectRowsFromLockfiles(): Row[] {
   const examplesDir = join(ROOT, 'examples');
   const rows: Row[] = [];
-  for (const entry of readdirSync(examplesDir)) {
+  for (const entry of readdirSync(examplesDir).sort()) {
     if (!entry.endsWith('.lock.json')) continue;
     const lock = JSON.parse(readFileSync(join(examplesDir, entry), 'utf8')) as {
       steps: Record<string, { text: string; resolved: ResolvedStep }>;
@@ -224,11 +224,13 @@ h1 { font: 400 clamp(38px, 5.4vw, 60px)/1.02 var(--display); color: var(--pickle
 .card { background: var(--card); border: 2px solid var(--ink); border-radius: 10px; box-shadow: 8px 8px 0 var(--ink); padding: 28px 30px 32px; margin-top: 48px; }
 h2 { font: 400 clamp(26px, 3.2vw, 38px)/1 var(--display); color: var(--pickle); margin: 0 0 18px; }
 
-table { width: 100%; border-collapse: collapse; }
+table { width: 100%; border-collapse: collapse; table-layout: fixed; }
 thead th { text-align: left; font: 600 11px/1.4 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-soft); border-bottom: 2px solid var(--ink); padding: 0 12px 10px 0; }
 tbody td { padding: 12px 12px 12px 0; border-bottom: 1px solid var(--rule); vertical-align: top; font-size: 15.5px; }
 tbody tr:last-child td { border-bottom: 0; }
-tbody td:first-child { width: 46%; }
+td, code { overflow-wrap: anywhere; word-break: break-word; }
+thead th:first-child, tbody td:first-child { width: 45%; }
+thead th:last-child, tbody td:last-child { width: 55%; }
 
 .fine { margin: 56px 0 80px; font-size: 15px; color: var(--ink-soft); max-width: 46em; }
 .fine + .fine { margin-top: -40px; }

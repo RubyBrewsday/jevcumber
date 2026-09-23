@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from 'vitest';
+import { chromium, type Browser } from '@playwright/test';
 import { buildCookbook } from '../scripts/cookbook.js';
 
 describe('buildCookbook', () => {
@@ -24,5 +25,19 @@ describe('buildCookbook', () => {
   it('has no duplicate rows', () => {
     const rows = [...html.matchAll(/<tr><td>[\s\S]*?<\/tr>/g)].map((m) => m[0]);
     expect(new Set(rows).size).toBe(rows.length);
+  });
+
+  describe('at mobile width', () => {
+    let browser: Browser;
+    afterAll(() => browser?.close());
+
+    it('does not overflow horizontally at 375px', async () => {
+      browser = await chromium.launch();
+      const page = await browser.newPage();
+      await page.setViewportSize({ width: 375, height: 800 });
+      await page.setContent(html);
+      const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+      expect(scrollWidth).toBeLessThanOrEqual(375);
+    });
   });
 });
