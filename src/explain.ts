@@ -73,6 +73,7 @@ export function describeResolved(resolved: ResolvedStep): string {
 
 export function explain(paths: string[], tags: string | undefined, write: (line: string) => void): 0 | 1 {
   const scenarios = loadFeatures(paths, tags);
+  if (scenarios.length === 0) throw new Error('no scenarios found');
   const locks = new Map<string, Lockfile>();
   let ok = true;
   let currentFeatureUri: string | undefined;
@@ -85,7 +86,8 @@ export function explain(paths: string[], tags: string | undefined, write: (line:
       currentFeatureUri = scenario.uri;
       write(`Feature: ${scenario.feature}`);
     }
-    write(`  Scenario: ${scenario.name}`);
+    const occurrenceSuffix = scenario.occurrence > 0 ? ` (${scenario.occurrence + 1})` : '';
+    write(`  Scenario: ${scenario.name}${occurrenceSuffix}`);
 
     scenario.steps.forEach((step, index) => {
       const entry = lock.getEntry(stepKey(scenario, index));
@@ -95,7 +97,8 @@ export function explain(paths: string[], tags: string | undefined, write: (line:
         return;
       }
       const mark = entry.resolved.kind === 'assert' && entry.resolved.assertion.form === 'semantic' ? '~' : '✓';
-      write(`    ${mark} ${step.keyword} ${step.text} → ${describeResolved(entry.resolved)}`);
+      const confidenceSuffix = entry.confidence !== undefined ? ` · confidence ${entry.confidence.toFixed(2)}` : '';
+      write(`    ${mark} ${step.keyword} ${step.text} → ${describeResolved(entry.resolved)}${confidenceSuffix}`);
     });
   }
 

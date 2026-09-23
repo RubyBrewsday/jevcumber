@@ -55,7 +55,7 @@ function installBrowser(extraArgs: string[]): number {
 }
 
 // Prints, for every scenario step, what its lockfile entry resolves to (no browser, no API).
-function runExplain(args: string[]): number {
+async function runExplain(args: string[]): Promise<number> {
   const sub = new Command()
     .name('jevcumber explain')
     .argument('<paths...>', 'feature files or directories')
@@ -66,12 +66,25 @@ function runExplain(args: string[]): number {
   } catch (error) {
     return (error as { exitCode?: number }).exitCode ?? 1;
   }
-  return explain(sub.args, sub.opts().tags, (line) => console.log(line));
+  try {
+    // Same precedence as the main run: an explicit --tags wins; otherwise fall back to the
+    // nearest jevcumber.config.js/.mjs found walking up from the cwd.
+    let tags: string | undefined = sub.opts().tags;
+    if (tags === undefined) {
+      const config = await loadConfig(findConfigFile(process.cwd()));
+      tags = config.tags;
+    }
+    return explain(sub.args, tags, (line) => console.log(line));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    process.stderr.write(`error: ${message}\n`);
+    return 1;
+  }
 }
 
 export async function main(argv: string[]): Promise<number> {
   if (argv[0] === 'install-browser') return installBrowser(argv.slice(1));
-  if (argv[0] === 'explain') return runExplain(argv.slice(1));
+  if (argv[0] === 'explain') return await runExplain(argv.slice(1));
 
   const program = new Command()
     .name('jevcumber')

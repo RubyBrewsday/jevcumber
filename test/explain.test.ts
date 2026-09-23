@@ -139,9 +139,46 @@ describe('explain', () => {
 
     expect(lines).toContain('Feature: A');
     expect(lines).toContain('  Scenario: one');
-    expect(lines).toContain('    ✓ Given I am on "/login" → open "/login"');
+    expect(lines).toContain('    ✓ Given I am on "/login" → open "/login" · confidence 0.97');
     expect(lines).toContain('    ~ When I see a greeting → judged live by Jev each run');
     expect(lines.some((l) => l.startsWith('    ✗ Then I click the Add button'))).toBe(true);
+  });
+
+  it('appends an occurrence suffix for the second-and-later scenario sharing a name', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'jevcumber-explain-'));
+    const feature = join(dir, 'b.feature');
+    writeFileSync(
+      feature,
+      [
+        'Feature: B',
+        '  Scenario: dup',
+        '    Given I am on "/login"',
+        '  Scenario: dup',
+        '    Given I am on "/login"',
+        '',
+      ].join('\n'),
+    );
+    const scenarios = parseFeature(readFileSync(feature, 'utf8'), feature);
+    const entries: Record<string, unknown> = {};
+    for (const scenario of scenarios) {
+      entries[stepKey(scenario, 0)] = { text: scenario.steps[0].text, resolved: { kind: 'navigate', value: '/login' } };
+    }
+    writeFileSync(lockPathFor(feature), JSON.stringify({ version: 2, steps: entries }, null, 2));
+
+    const lines: string[] = [];
+    expect(explain([dir], undefined, (line) => lines.push(line))).toBe(0);
+    expect(lines).toContain('  Scenario: dup');
+    expect(lines).toContain('  Scenario: dup (2)');
+  });
+
+  it('throws "no scenarios found" when no feature files match', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'jevcumber-explain-'));
+    expect(() => explain([dir], undefined, () => {})).toThrow('no scenarios found');
+  });
+
+  it('throws "no scenarios found" when a tag expression matches nothing', () => {
+    const { dir } = workspace();
+    expect(() => explain([dir], '@nonexistent', () => {})).toThrow('no scenarios found');
   });
 
   it('returns 0 when every step has a lockfile entry', () => {
