@@ -37,4 +37,11 @@ export const RESOLVED: Record<string, ResolvedStep> = {
   'I should see "dana"': sees('dana'),
   'I click the link that signs me out': { kind: 'click', locator: { by: 'role', role: 'link', name: 'Sign out' } },
   'I should see "Sign in"': sees('Sign in'),
+  'I hover over the Sign out link': { kind: 'hover', locator: { by: 'role', role: 'link', name: 'Sign out' } },
+  'I clear the new todo field': { kind: 'clear', locator: newTodo },
+  'I scroll to the Add button': { kind: 'scroll', locator: add },
+  'I wait for "Welcome, dana" to appear': { kind: 'wait', text: 'Welcome, dana' },
+  'I wait 1 second': { kind: 'wait', seconds: 1 },
+  'I wait for the page to settle': { kind: 'wait' },
+  'I upload "avatar.png" as the avatar': { kind: 'upload', locator: { by: 'label', value: 'Avatar' }, value: 'avatar.png' },
 };

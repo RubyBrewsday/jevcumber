@@ -24,3 +24,12 @@ Feature: Steps that need live Jev
   Scenario: a target described rather than named
     When I click the link that signs me out
     Then I should see "Sign in"
+
+  Scenario: new step kinds
+    When I hover over the Sign out link
+    And I clear the new todo field
+    And I scroll to the Add button
+    And I wait for "Welcome, dana" to appear
+    And I wait 1 second
+    And I wait for the page to settle
+    And I upload "avatar.png" as the avatar
