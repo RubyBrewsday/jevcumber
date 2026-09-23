@@ -157,4 +157,84 @@ describe('jevcumber --frozen against the fixture app', () => {
       errors.mockRestore();
     }
   });
+
+  it('runs scenarios in parallel workers and prints one block per scenario', async () => {
+    const { dir, feature } = workspace();
+    const scenarios = parseFeature(readFileSync(feature, 'utf8'), feature);
+    const logs: string[] = [];
+    const spy = vi.spyOn(console, 'log').mockImplementation((line?: unknown) => {
+      logs.push(String(line ?? ''));
+    });
+    try {
+      expect(await main([dir, '--base-url', server.url, '--frozen', '--workers', '2'])).toBe(0);
+    } finally {
+      spy.mockRestore();
+    }
+
+    // Split the captured lines into per-scenario blocks: a "  Scenario:" line starts a new block
+    // and every subsequent indented step line (four-space indent, then a status mark) belongs to it.
+    const blocks: { name: string; lines: string[] }[] = [];
+    for (const line of logs) {
+      const match = /^ {2}Scenario: (.+)$/.exec(line);
+      if (match) {
+        blocks.push({ name: match[1], lines: [] });
+      } else if (blocks.length > 0 && /^ {4}[✓↻✗?-] /.test(line)) {
+        blocks[blocks.length - 1].lines.push(line);
+      }
+    }
+
+    expect(blocks.map((b) => b.name)).toEqual(scenarios.map((s) => s.name));
+    for (const [i, scenario] of scenarios.entries()) {
+      const actualTexts = blocks[i].lines.map((line) => line.replace(/^ {4}[✓↻✗?-] \w+ /, '').replace(/ \([^)]*\)$/, ''));
+      expect(actualTexts).toEqual(scenario.steps.map((s) => s.text));
+    }
+  });
+
+  it('reads defaults and hooks from jevcumber.config.mjs', async () => {
+    const { dir, feature } = workspace();
+    const scenarios = parseFeature(readFileSync(feature, 'utf8'), feature);
+    const marker = join(dir, 'scenarios.log');
+    writeFileSync(
+      join(dir, 'jevcumber.config.mjs'),
+      [
+        "import { appendFileSync } from 'node:fs';",
+        'export default {',
+        `  baseUrl: ${JSON.stringify(server.url)},`,
+        '  hooks: {',
+        '    beforeScenario({ page, scenario }) {',
+        '      page.setDefaultTimeout(5000);',
+        `      appendFileSync(${JSON.stringify(marker)}, scenario.name + '\\n');`,
+        '    },',
+        '  },',
+        '};',
+        '',
+      ].join('\n'),
+    );
+
+    const originalCwd = process.cwd();
+    process.chdir(dir);
+    try {
+      expect(await main([dir, '--frozen'])).toBe(0);
+    } finally {
+      process.chdir(originalCwd);
+    }
+
+    const seen = readFileSync(marker, 'utf8').trim().split('\n').sort();
+    expect(seen).toEqual(scenarios.map((s) => s.name).sort());
+  });
+
+  it('--reporter json and junit write files', async () => {
+    const { dir } = workspace();
+    const reportDir = join(dir, 'r');
+    expect(
+      await main([dir, '--base-url', server.url, '--frozen', '--reporter', 'json', '--reporter', 'junit', '--report-dir', reportDir]),
+    ).toBe(0);
+
+    const json = JSON.parse(readFileSync(join(reportDir, 'results.json'), 'utf8'));
+    expect(json).toHaveLength(1);
+    expect(json[0].name).toBe('Login');
+
+    const xml = readFileSync(join(reportDir, 'results.xml'), 'utf8');
+    expect(xml).toContain('<testsuite name="Login"');
+  });
 });

@@ -131,8 +131,46 @@ jevcumber <paths...> [options]
 | `--report-dir <dir>` | Where failure evidence goes (default `jevcumber-report`). `--no-report` disables it. |
 | `--trace` | Record a Playwright trace per scenario; keep it for scenarios that did not pass. |
 | `--min-confidence <n>` | Refuse to act below this confidence (default `0.6`; page-sourced values need `0.75`). |
+| `--workers <n>` | Number of scenarios to run concurrently (default: available CPUs, or `1` with `--headed`). |
+| `--config <path>` | Path to `jevcumber.config.js`/`.mjs` (default: the nearest one found walking up from the cwd). |
+| `--reporter <name>` | Reporter to use: `console` (default), `json`, or `junit`. Repeatable to run several at once. |
+| `--output <file>` | Output file for the `json`/`junit` reporters (default: `results.json`/`results.xml` under `--report-dir`). |
 
 Exit code is `1` if any step failed, was ambiguous, or was undefined.
+
+Runs are **parallel by default**, one worker per scenario up to `--workers` (which defaults to your
+CPU count): pass `--workers 1` to run serially, and `--headed` always implies `1` since it drives a
+single visible browser window. Console output for a scenario is printed as a whole block as soon as
+that scenario finishes, so scenarios never interleave in the log even when several run at once.
+
+### Config file
+
+Drop a `jevcumber.config.js` (or `.mjs`) next to your features, or anywhere above the directory you
+run jevcumber from — it's found by walking up from the current directory, and `--config <path>`
+overrides the search. Any value it sets is a default: the matching CLI flag, when passed, always wins.
+
+```js
+// jevcumber.config.js
+export default {
+  baseUrl: 'http://localhost:3000',
+  workers: 4,
+  tags: '@smoke and not @wip',
+  minConfidence: 0.6,
+  reportDir: 'jevcumber-report',
+  hooks: {
+    async beforeScenario({ page, scenario, baseUrl }) {
+      // runs once per scenario, before its first step
+      await page.setDefaultTimeout(5000);
+    },
+    async afterScenario({ page, scenario, baseUrl, results }) {
+      // runs once per scenario, after its last step; `results` are that scenario's step results
+    },
+  },
+};
+```
+
+A `beforeScenario` that throws fails the scenario outright (its steps are all skipped, and Jev is
+never called); an `afterScenario` that throws is reported as a failed step appended to the scenario.
 
 Backgrounds, Scenario Outlines, data tables, doc strings, `And`/`But`, and tags all work — parsing is
 done by the official `@cucumber/gherkin`.

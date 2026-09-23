@@ -282,6 +282,56 @@ describe('runScenario', () => {
     await runScenario(scenario, deps);
     expect(lock.getEntry(stepKey(scenario, 0))?.confidence).toBe(0.9);
   });
+
+  it('a throwing before hook fails every step and never resolves', async () => {
+    const { deps, calls, lock } = harness({
+      before: () => {
+        throw new Error('boom');
+      },
+    });
+    const results = await runScenario(scenario, deps);
+    expect(results).toEqual([
+      { step: { keyword: 'Given', text: 'beforeScenario hook' }, status: 'failed', detail: 'beforeScenario hook: boom', durationMs: expect.any(Number) },
+      { step: scenario.steps[0], status: 'skipped', durationMs: 0 },
+      { step: scenario.steps[1], status: 'skipped', durationMs: 0 },
+      { step: scenario.steps[2], status: 'skipped', durationMs: 0 },
+    ]);
+    expect(calls.resolve).toEqual([]);
+    expect(lock.get(stepKey(scenario, 0))).toBeUndefined();
+  });
+
+  it('touches lockfile keys for steps skipped by a failing before hook', async () => {
+    const { deps, lock, path } = harness(
+      { before: () => { throw new Error('boom'); } },
+      { 0: nav('/a'), 1: nav('/b'), 2: nav('/c') },
+    );
+    await runScenario(scenario, deps);
+    lock.save(true);
+    expect(Object.keys(JSON.parse(readFileSync(path, 'utf8')).steps)).toHaveLength(3);
+  });
+
+  it('awaits an after hook and passes it the results', async () => {
+    let seen: unknown;
+    const { deps } = harness({ after: (results) => { seen = results; } });
+    const results = await runScenario(scenario, deps);
+    expect(seen).toEqual(results);
+  });
+
+  it('appends a synthetic failed result when the after hook throws', async () => {
+    const { deps } = harness({
+      after: () => {
+        throw new Error('cleanup failed');
+      },
+    });
+    const results = await runScenario(scenario, deps);
+    expect(results).toHaveLength(4);
+    expect(results.slice(0, 3).map((r) => r.status)).toEqual(['passed', 'passed', 'passed']);
+    expect(results[3]).toMatchObject({
+      step: { keyword: 'Given', text: 'afterScenario hook' },
+      status: 'failed',
+      detail: 'afterScenario hook: cleanup failed',
+    });
+  });
 });
 
 describe('runAll', () => {
@@ -304,6 +354,7 @@ describe('runAll', () => {
       reportDir: 'jevcumber-report',
       report: true,
       trace: false,
+      workers: 1,
     });
     expect(results).toEqual([]);
     expect(calls).toEqual([]);

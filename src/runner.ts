@@ -2,6 +2,7 @@ import { mkdirSync, rmSync } from 'node:fs';
 import { dirname, join, resolve as resolvePath } from 'node:path';
 import { chromium, type Page } from '@playwright/test';
 import { extractValues } from './candidates.js';
+import type { ConfigHooks } from './config.js';
 import { captureStep, scenarioDir, stepDir } from './evidence.js';
 import { actionLocators, execute } from './executor.js';
 import { loadFeatures } from './gherkin.js';
@@ -24,6 +25,12 @@ export interface ScenarioDeps {
    *  any per-step state (e.g. the last Jev snapshot) so a skipped resolve doesn't reuse stale data. */
   beforeStep?(): void | Promise<void>;
   onStep?(result: StepResult, index: number): void | Promise<void>;
+  /** Runs once before the first step. A throw fails every step (as a synthetic "beforeScenario
+   *  hook" step) without ever calling resolve(). */
+  before?(): void | Promise<void>;
+  /** Runs once after the last step (even if `before` failed), and is given the results so far.
+   *  A throw appends a synthetic "afterScenario hook" failed result. */
+  after?(results: StepResult[]): void | Promise<void>;
 }
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
@@ -114,12 +121,40 @@ export async function runScenario(scenario: Scenario, deps: ScenarioDeps): Promi
     return stepResult;
   };
 
+  if (deps.before) {
+    try {
+      await deps.before();
+    } catch (error) {
+      results.push({
+        step: { keyword: 'Given', text: 'beforeScenario hook' },
+        status: 'failed',
+        detail: `beforeScenario hook: ${message(error)}`,
+        durationMs: 0,
+      });
+      skipping = true;
+    }
+  }
+
   for (const [index, step] of scenario.steps.entries()) {
     const result = await runStep(step, index);
     if (result.status !== 'passed' && result.status !== 'healed') skipping = true;
     results.push(result);
     await deps.onStep?.(result, index);
   }
+
+  if (deps.after) {
+    try {
+      await deps.after(results);
+    } catch (error) {
+      results.push({
+        step: { keyword: 'Given', text: 'afterScenario hook' },
+        status: 'failed',
+        detail: `afterScenario hook: ${message(error)}`,
+        durationMs: 0,
+      });
+    }
+  }
+
   return results;
 }
 
@@ -138,6 +173,10 @@ export interface RunOptions {
    *  `trace` even when this is false, so a trace-only run's trace lands where the user asked. */
   report: boolean;
   trace: boolean;
+  /** Number of scenario workers to run concurrently. Ignored (treated as 1) when `headed` is true:
+   *  a headed run against a single visible browser window can't usefully show two scenarios at once. */
+  workers: number;
+  hooks?: ConfigHooks;
 }
 
 async function isValid(page: Page, resolved: ResolvedStep): Promise<boolean> {
@@ -163,13 +202,14 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
     return locks.get(uri)!;
   };
 
-  const results: ScenarioResult[] = [];
   let completed = false;
   const browser = await chromium.launch({ headless: !options.headed });
+  const ordered: ScenarioResult[] = new Array(scenarios.length);
   try {
     try {
       options.reporter.start?.(scenarios);
-      for (const scenario of scenarios) {
+
+      const runOne = async (scenario: Scenario): Promise<ScenarioResult> => {
         options.reporter.scenarioStart(scenario);
         // Evidence and traces are written fresh each run: a stale screenshot/snapshot/trace from an
         // earlier run of this scenario must never linger and be mistaken for this run's.
@@ -220,6 +260,8 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
               }
               options.reporter.step(scenario, result);
             },
+            before: () => options.hooks?.beforeScenario?.({ page, scenario, baseUrl: options.baseUrl }),
+            after: (results) => options.hooks?.afterScenario?.({ page, scenario, baseUrl: options.baseUrl, results }),
           });
           const result: ScenarioResult = { scenario, steps };
           if (options.trace) {
@@ -235,12 +277,37 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
               // best-effort, same as screenshot/snapshot capture: a trace failure must not abort the run
             }
           }
-          results.push(result);
           options.reporter.scenarioEnd?.(result);
+          return result;
         } finally {
           await context.close();
         }
-      }
+      };
+
+      // A headed run drives a single visible browser window, so it can only usefully show one
+      // scenario at a time regardless of --workers.
+      const workers = options.headed ? 1 : Math.max(1, Math.min(options.workers, scenarios.length));
+      let next = 0;
+      const worker = async () => {
+        while (next < scenarios.length) {
+          const index = next++;
+          const scenario = scenarios[index];
+          try {
+            ordered[index] = await runOne(scenario);
+          } catch (error) {
+            // A worker crash on one scenario (e.g. context creation failing) must not take down
+            // the others still in the queue.
+            const failedResult: ScenarioResult = {
+              scenario,
+              steps: [{ step: { keyword: 'Given', text: scenario.name }, status: 'failed', detail: message(error), durationMs: 0 }],
+            };
+            options.reporter.scenarioEnd?.(failedResult);
+            ordered[index] = failedResult;
+          }
+        }
+      };
+      await Promise.all(Array.from({ length: workers }, worker));
+
       completed = true;
     } finally {
       await browser.close();
@@ -253,6 +320,6 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
     }
   }
 
-  options.reporter.end(results);
-  return results;
+  options.reporter.end(ordered);
+  return ordered;
 }

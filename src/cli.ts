@@ -2,10 +2,12 @@
 import { spawnSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { availableParallelism } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { Command, InvalidArgumentError } from 'commander';
+import { findConfigFile, loadConfig } from './config.js';
 import { exitCode } from './reporter.js';
-import { createReporters } from './reporters/index.js';
+import { createReporters, type ReporterName } from './reporters/index.js';
 import { runAll } from './runner.js';
 import type { Mode } from './types.js';
 
@@ -22,6 +24,16 @@ function parseBaseUrl(raw: string): string {
     throw new InvalidArgumentError('must be an absolute URL, e.g. http://localhost:3000');
   }
   return raw;
+}
+
+function parseWorkers(raw: string): number {
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1) throw new InvalidArgumentError('must be a positive integer');
+  return value;
+}
+
+function collect(value: string, previous: string[]): string[] {
+  return [...previous, value];
 }
 
 // Installs the browser build that matches the Playwright bundled with jevcumber; a stray
@@ -52,6 +64,10 @@ export async function main(argv: string[]): Promise<number> {
       'record a Playwright trace per scenario; kept under --report-dir for scenarios that did not pass (even with --no-report)',
       false,
     )
+    .option('--workers <n>', 'number of scenarios to run concurrently (default: available CPUs, or 1 with --headed)', parseWorkers)
+    .option('--config <path>', 'path to a jevcumber.config.js/.mjs (default: the nearest one found walking up from cwd)')
+    .option('--reporter <name>', 'reporter to use (console, json, junit); repeatable', collect, [] as string[])
+    .option('--output <file>', 'output file for the json/junit reporters (default under --report-dir)')
     .addHelpText('after', '\nFirst time? Run `jevcumber install-browser` to download the Chromium build jevcumber drives.')
     .exitOverride();
 
@@ -69,22 +85,42 @@ export async function main(argv: string[]): Promise<number> {
   }
   const mode: Mode = options.frozen ? 'frozen' : options.update ? 'update' : 'default';
 
+  let config;
+  try {
+    const configPath = program.getOptionValueSource('config') === 'cli' ? options.config : findConfigFile(process.cwd());
+    config = await loadConfig(configPath);
+  } catch (error) {
+    console.error(`error: ${error instanceof Error ? error.message : String(error)}`);
+    return 1;
+  }
+
+  const fromCli = (name: string) => program.getOptionValueSource(name) === 'cli';
+  const baseUrl = fromCli('baseUrl') ? options.baseUrl : (config.baseUrl ?? options.baseUrl);
+  const tags = fromCli('tags') ? options.tags : (config.tags ?? options.tags);
+  const minConfidence = fromCli('minConfidence') ? options.minConfidence : (config.minConfidence ?? options.minConfidence);
+  const reportDir = fromCli('reportDir') ? options.reportDir : (config.reportDir ?? options.reportDir);
+  const workers = fromCli('workers') ? options.workers : (config.workers ?? availableParallelism());
+  const reporterNames: ReporterName[] = (options.reporter.length > 0 ? options.reporter : ['console']) as ReporterName[];
+
   try {
     const results = await runAll({
       paths: program.args,
-      baseUrl: options.baseUrl,
+      baseUrl,
       mode,
       headed: options.headed,
-      minConfidence: options.minConfidence,
-      tags: options.tags,
-      reporter: createReporters(['console'], {
-        reportDir: options.reportDir,
+      minConfidence,
+      tags,
+      reporter: createReporters(reporterNames, {
+        output: options.output,
+        reportDir,
         isTTY: process.stdout.isTTY === true,
         writeStatus: (s) => process.stderr.write(s),
       }),
-      reportDir: options.reportDir,
+      reportDir,
       report: options.report !== false,
       trace: options.trace,
+      workers,
+      hooks: config.hooks,
     });
     if (results.length === 0) {
       console.error('error: no scenarios found');
