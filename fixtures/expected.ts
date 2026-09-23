@@ -44,4 +44,7 @@ export const RESOLVED: Record<string, ResolvedStep> = {
   'I wait 1 second': { kind: 'wait', seconds: 1 },
   'I wait for the page to settle': { kind: 'wait' },
   'I upload "avatar.png" as the avatar': { kind: 'upload', locator: { by: 'label', value: 'Avatar' }, value: 'avatar.png' },
+  'I check the Remind me box': { kind: 'check', locator: { by: 'role', role: 'checkbox', name: 'Remind me' } },
+  'I choose "High" as the priority': { kind: 'select', locator: { by: 'role', role: 'combobox', name: 'Priority' }, value: 'High' },
+  'I uncheck the Remind me box': { kind: 'uncheck', locator: { by: 'role', role: 'checkbox', name: 'Remind me' } },
 };

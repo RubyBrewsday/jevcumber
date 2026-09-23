@@ -33,3 +33,8 @@ Feature: Steps that need live Jev
     And I wait 1 second
     And I wait for the page to settle
     And I upload "avatar.png" as the avatar
+
+  Scenario: choosing and checking
+    When I check the Remind me box
+    And I choose "High" as the priority
+    And I uncheck the Remind me box
