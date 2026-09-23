@@ -183,10 +183,15 @@ describe('jevcumber --frozen against the fixture app', () => {
       }
     }
 
-    expect(blocks.map((b) => b.name)).toEqual(scenarios.map((s) => s.name));
-    for (const [i, scenario] of scenarios.entries()) {
-      const actualTexts = blocks[i].lines.map((line) => line.replace(/^ {4}[✓↻✗?-] \w+ /, '').replace(/ \([^)]*\)$/, ''));
-      expect(actualTexts).toEqual(scenario.steps.map((s) => s.text));
+    // Parallel workers finish in whatever order they finish in: match blocks to scenarios by
+    // name (set equality), not by position, and check each block's own steps against its own
+    // scenario rather than assuming block i belongs to scenarios[i].
+    expect(blocks.map((b) => b.name).sort()).toEqual(scenarios.map((s) => s.name).sort());
+    for (const block of blocks) {
+      const scenario = scenarios.find((s) => s.name === block.name);
+      expect(scenario, `no scenario named "${block.name}"`).toBeDefined();
+      const actualTexts = block.lines.map((line) => line.replace(/^ {4}[✓↻✗?-] \w+ /, '').replace(/ \([^)]*\)$/, ''));
+      expect(actualTexts).toEqual(scenario!.steps.map((s) => s.text));
     }
   });
 
@@ -249,5 +254,50 @@ describe('jevcumber --frozen against the fixture app', () => {
 
     const xml = readFileSync(join(reportDir, 'results.xml'), 'utf8');
     expect(xml).toContain('<testsuite name="Login"');
+  });
+
+  it('rejects an unknown --reporter name at parse time, before touching the browser', async () => {
+    const { dir } = workspace();
+    const errors = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      expect(await main([dir, '--base-url', server.url, '--frozen', '--reporter', 'xml'])).toBe(1);
+      expect(errors.mock.calls.flat().join('\n')).toMatch(/unknown reporter "xml"/);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  it('de-duplicates repeated --reporter names', async () => {
+    const { dir } = workspace();
+    const reportDir = join(dir, 'r');
+    expect(
+      await main([dir, '--base-url', server.url, '--frozen', '--reporter', 'json', '--reporter', 'json', '--report-dir', reportDir]),
+    ).toBe(0);
+    const json = JSON.parse(readFileSync(join(reportDir, 'results.json'), 'utf8'));
+    expect(json).toHaveLength(1);
+  });
+
+  it('rejects --output when more than one file reporter is selected', async () => {
+    const { dir } = workspace();
+    const errors = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      expect(
+        await main([dir, '--base-url', server.url, '--frozen', '--reporter', 'json', '--reporter', 'junit', '--output', join(dir, 'out')]),
+      ).toBe(1);
+      expect(errors.mock.calls.flat().join('\n')).toMatch(/--output applies to a single file reporter; use --report-dir for several/);
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  it('warns to stderr when --output is given with only the console reporter, but still runs', async () => {
+    const { dir } = workspace();
+    const errors = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      expect(await main([dir, '--base-url', server.url, '--frozen', '--output', join(dir, 'out')])).toBe(0);
+      expect(errors.mock.calls.flat().join('\n')).toMatch(/--output/);
+    } finally {
+      errors.mockRestore();
+    }
   });
 });

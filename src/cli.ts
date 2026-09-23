@@ -100,7 +100,29 @@ export async function main(argv: string[]): Promise<number> {
   const minConfidence = fromCli('minConfidence') ? options.minConfidence : (config.minConfidence ?? options.minConfidence);
   const reportDir = fromCli('reportDir') ? options.reportDir : (config.reportDir ?? options.reportDir);
   const workers = fromCli('workers') ? options.workers : (config.workers ?? availableParallelism());
-  const reporterNames: ReporterName[] = (options.reporter.length > 0 ? options.reporter : ['console']) as ReporterName[];
+
+  const KNOWN_REPORTERS = new Set<ReporterName>(['console', 'json', 'junit']);
+  const rawReporterNames = (options.reporter.length > 0 ? options.reporter : ['console']) as ReporterName[];
+  for (const name of rawReporterNames) {
+    if (!KNOWN_REPORTERS.has(name)) {
+      // Written directly to process.stderr (not console.error), which binds its stream at
+      // startup: a test spying on process.stderr.write to assert on CLI errors would otherwise
+      // never see console.error's output.
+      process.stderr.write(`error: unknown reporter "${name}" (expected console, json, or junit)\n`);
+      return 1;
+    }
+  }
+  // De-duplicate before launching anything: `--reporter json --reporter json` must not write the
+  // same file twice (or, worse, be treated as "two file reporters" by the --output check below).
+  const reporterNames = [...new Set(rawReporterNames)];
+  const fileReporters = reporterNames.filter((name) => name === 'json' || name === 'junit');
+  if (options.output && fileReporters.length > 1) {
+    process.stderr.write('error: --output applies to a single file reporter; use --report-dir for several\n');
+    return 1;
+  }
+  if (options.output && fileReporters.length === 0) {
+    process.stderr.write('warning: --output has no effect without a json or junit reporter\n');
+  }
 
   try {
     const results = await runAll({
