@@ -113,7 +113,7 @@ export async function main(argv: string[]): Promise<number> {
       reporter: createReporters(reporterNames, {
         output: options.output,
         reportDir,
-        isTTY: process.stdout.isTTY === true,
+        isTTY: process.stderr.isTTY === true,
         writeStatus: (s) => process.stderr.write(s),
       }),
       reportDir,

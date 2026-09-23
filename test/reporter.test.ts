@@ -106,6 +106,28 @@ describe('consoleReporter', () => {
       reporter.scenarioEnd({ scenario, steps: [] });
       expect(statusLines.at(-1)).toBe('\r\x1b[K1/2 scenarios · 1 running · 0 failed');
     });
+
+    it('clears the status line before writing the scenario block, then redraws after', () => {
+      const events: string[] = [];
+      const reporter = consoleReporter({
+        write: (line) => events.push(`write:${line}`),
+        writeStatus: (s) => events.push(`status:${s}`),
+        isTTY: true,
+      });
+      reporter.start?.([scenario]);
+      reporter.scenarioStart(scenario);
+      reporter.step(scenario, { step: { keyword: 'When', text: 'step 0' }, status: 'passed', durationMs: 0 });
+      events.length = 0; // drop scenarioStart's own redraw; only scenarioEnd's sequence matters here
+      reporter.scenarioEnd({ scenario, steps: [] });
+
+      expect(events).toEqual([
+        'status:\r\x1b[K',
+        'write:Feature: Login',
+        'write:  Scenario: logs in',
+        'write:    ✓ When step 0',
+        'status:\r\x1b[K1/1 scenarios · 0 running · 0 failed',
+      ]);
+    });
   });
 });
 

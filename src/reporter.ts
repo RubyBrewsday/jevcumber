@@ -76,6 +76,8 @@ export function consoleReporter(options: ConsoleReporterOptions = {}): Reporter 
       const buffer = buffers.get(key);
       buffers.delete(key);
 
+      if (isTTY) writeStatus('\r\x1b[K');
+
       if (result.scenario.feature !== currentFeature) {
         currentFeature = result.scenario.feature;
         write(`Feature: ${result.scenario.feature}`);

@@ -61,7 +61,10 @@ export function toJunitXml(results: ScenarioResult[]): string {
     const featureName = escapeXml(scenarios[0].scenario.feature);
     const tests = scenarios.length;
     const failures = scenarios.filter((r) => !scenarioPassed(r)).length;
-    const skipped = scenarios.filter((r) => r.steps.length > 0 && r.steps.every((s) => s.status === 'skipped')).length;
+    // A scenario's first step is never itself skipped (runScenario only starts skipping after a
+    // step fails), so no scenario is ever "wholly skipped" — this JUnit dialect has no concept of
+    // a partially-skipped-but-failed scenario distinct from `failures`, so `skipped` is always 0.
+    const skipped = 0;
     const time = scenarios.reduce((total, r) => total + scenarioTimeSeconds(r), 0).toFixed(3);
 
     return [

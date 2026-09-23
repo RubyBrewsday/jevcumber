@@ -46,8 +46,9 @@ export function toCucumberJson(results: ScenarioResult[]): unknown {
       feature = { uri: scenario.uri, id: slug(scenario.feature), keyword: 'Feature', name: scenario.feature, elements: [] };
       features.set(scenario.uri, feature);
     }
+    const scenarioSlug = scenario.occurrence > 0 ? `${slug(scenario.name)}-${scenario.occurrence + 1}` : slug(scenario.name);
     feature.elements.push({
-      id: `${feature.id};${slug(scenario.name)}`,
+      id: `${feature.id};${scenarioSlug}`,
       keyword: 'Scenario',
       name: scenario.name,
       type: 'scenario',
