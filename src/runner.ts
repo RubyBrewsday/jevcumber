@@ -265,20 +265,35 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
               const snap = await snapshot(page, { relevantTo: step.text });
               lastSnapshot = snap;
               let exchange: JevExchange | undefined;
-              const outcome = await resolve({
-                step,
-                scenarioName: scenario.name,
-                previousSteps,
-                snapshot: snap,
-                values: extractValues(step),
-                client: getClient(),
-                minConfidence: options.minConfidence,
-                onRequest: options.recordEval ? (e) => (exchange = e) : undefined,
-              });
-              if (options.recordEval && exchange) {
-                recordEval(options.recordEval, scenario, index, 'resolve', { step, exchange, outcome });
+              let outcome: ResolveOutcome | undefined;
+              let caught: unknown;
+              try {
+                outcome = await resolve({
+                  step,
+                  scenarioName: scenario.name,
+                  previousSteps,
+                  snapshot: snap,
+                  values: extractValues(step),
+                  client: getClient(),
+                  minConfidence: options.minConfidence,
+                  onRequest: options.recordEval ? (e) => (exchange = e) : undefined,
+                });
+                return outcome;
+              } catch (error) {
+                caught = error;
+                throw error;
+              } finally {
+                // Record whenever onRequest fired, even if resolve() threw afterwards (e.g. a
+                // malformed Jev response): the exchange that caused the failure is exactly what's
+                // needed to reproduce it offline.
+                if (options.recordEval && exchange) {
+                  recordEval(options.recordEval, scenario, index, 'resolve', {
+                    step,
+                    exchange,
+                    outcome: outcome ?? { error: message(caught) },
+                  });
+                }
               }
-              return outcome;
             },
             isValid: (resolved) => isValid(page, resolved),
             execute: (resolved, step) =>
@@ -290,16 +305,30 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
                   ? undefined
                   : async (text) => {
                       let exchange: JevExchange | undefined;
-                      const judgment = await judge(
-                        getClient(),
-                        text,
-                        await snapshot(page, { elements: false, relevantTo: text }),
-                        options.recordEval ? (e) => (exchange = e) : undefined,
-                      );
-                      if (options.recordEval && exchange) {
-                        recordEval(options.recordEval, scenario, currentIndex, 'judge', { step, exchange, outcome: judgment });
+                      let judgment: Awaited<ReturnType<typeof judge>> | undefined;
+                      let caught: unknown;
+                      try {
+                        judgment = await judge(
+                          getClient(),
+                          text,
+                          await snapshot(page, { elements: false, relevantTo: text }),
+                          options.recordEval ? (e) => (exchange = e) : undefined,
+                        );
+                        return judgment;
+                      } catch (error) {
+                        caught = error;
+                        throw error;
+                      } finally {
+                        // Same as the resolve() wrapper above: record whenever onRequest fired,
+                        // even when judge() threw afterwards.
+                        if (options.recordEval && exchange) {
+                          recordEval(options.recordEval, scenario, currentIndex, 'judge', {
+                            step,
+                            exchange,
+                            outcome: judgment ?? { error: message(caught) },
+                          });
+                        }
                       }
-                      return judgment;
                     },
               }),
             // A step that never calls resolve() (a cached hit, or --frozen) leaves no snapshot of

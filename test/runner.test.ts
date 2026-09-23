@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { chromium, type Browser } from '@playwright/test';
 import { parseFeature } from '../src/gherkin.js';
 import { Lockfile, lockPathFor, stepKey } from '../src/lockfile.js';
+import * as resolverModule from '../src/resolver.js';
 import { runAll, runScenario, type Reporter, type ScenarioDeps } from '../src/runner.js';
 import type { ResolveOutcome, ResolvedStep, Scenario, ScenarioResult, StepResult } from '../src/types.js';
 
@@ -490,6 +491,51 @@ describe('runAll', () => {
     }
   });
 
+  it('--record-eval records a resolve() call that threw after Jev responded, with outcome.error set', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'jevcumber-'));
+    const featurePath = join(dir, 'bad.feature');
+    writeFileSync(featurePath, ['Feature: Bad', '  Scenario: only', '    Given I am on "about:blank"', ''].join('\n'));
+    const recordDir = join(dir, 'eval');
+
+    // A malformed Jev response (no usable "kind" answer): resolve() calls onRequest with the
+    // exchange it actually had, then throws, exactly like the real implementation does when Jev's
+    // response doesn't have what resolve() needs.
+    const clientSpy = vi
+      .spyOn(resolverModule, 'createClient')
+      .mockReturnValue({ systemOne: async () => ({ answers: {} }) });
+    const resolveSpy = vi.spyOn(resolverModule, 'resolve').mockImplementationOnce(async (input) => {
+      const exchange = { state: { step: input.step }, questions: { kind: { type: 'choice' } }, answers: {} };
+      input.onRequest?.(exchange);
+      throw new Error('Unexpected response from Jev: no answer for "kind".');
+    });
+
+    const realBrowser = await chromium.launch();
+    const reporter: Reporter = { scenarioStart: () => {}, step: () => {}, scenarioEnd: () => {}, end: () => {} };
+    try {
+      const results = await runAll({
+        paths: [dir],
+        mode: 'update', // no lockfile entry needed: always calls resolve()
+        headed: false,
+        minConfidence: 0.6,
+        reporter,
+        reportDir: join(dir, 'report'),
+        report: false,
+        trace: false,
+        workers: 1,
+        recordEval: recordDir,
+        launch: async () => realBrowser,
+      });
+      expect(results[0].steps[0]).toMatchObject({ status: 'failed', detail: expect.stringContaining('no answer for "kind"') });
+    } finally {
+      resolveSpy.mockRestore();
+      clientSpy.mockRestore();
+      await realBrowser.close();
+    }
+
+    const written = JSON.parse(readFileSync(join(recordDir, 'bad', 'only', '1.json'), 'utf8'));
+    expect(written.outcome).toMatchObject({ error: expect.stringMatching(/no answer for "kind"/) });
+  });
+
   it('saves every lockfile without pruning and exits on SIGINT, removing the handler once the run ends', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'jevcumber-'));
     const featurePath = join(dir, 'sigint.feature');
@@ -536,4 +582,5 @@ describe('runAll', () => {
       await realBrowser.close();
     }
   });
+
 });

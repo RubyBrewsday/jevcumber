@@ -296,11 +296,13 @@ npx vitest run e2e/resolve-eval.test.ts --silent=false --reporter=verbose
 When a kind of step resolves badly: add a scenario for it to the fixtures, watch it miss, then adjust
 the wording in `src/resolver.ts`. Don't paste the fixture's own sentence into a question's examples.
 
-Reproducing a misresolution from a real run is easier with `--record-eval <dir>`: it writes exactly
-what every `resolve()` and `judge()` call sent to Jev and got back, plus the outcome, as
-`<dir>/<feature>/<scenario-slug>/<step-number>.json` (and `<step-number>-judge.json` for the judge
-call a semantic assertion makes), each holding `{ step, state, questions, answers, outcome }`. It
-never writes anything under `--frozen`, since no Jev calls happen there. To turn a bad recording into
+Reproducing a misresolution from a real run is easier with `--record-eval <dir>`: for every call,
+including ones that failed, it writes exactly what `resolve()` and `judge()` sent to Jev and got
+back, plus the outcome, as `<dir>/<feature>/<scenario-slug>/<step-number>.json` (and
+`<step-number>-judge.json` for the judge call a semantic assertion makes), each holding
+`{ step, state, questions, answers, outcome }` — `outcome` is `{ error: <message> }` when the call
+threw after Jev responded (e.g. a malformed answer). It never writes anything under `--frozen`, since
+no Jev calls happen there. To turn a bad recording into
 an eval fixture: copy the step's `step.text` into a scenario in `fixtures/features/login.feature` (or
 `fixtures/eval/live-only.feature` for one that only needs the live app), add its known-good
 `ResolvedStep` to `fixtures/expected.ts`, and re-run `resolve-eval.test.ts` to confirm Jev now gets it

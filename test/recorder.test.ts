@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { recordEval } from '../src/recorder.js';
@@ -44,7 +44,19 @@ describe('recordEval', () => {
 
   it('creates the directory when it does not exist yet', () => {
     const dir = join(mkdtempSync(join(tmpdir(), 'jevcumber-record-')), 'nested', 'more');
-    recordEval(dir, scenario, 0, 'resolve', { step, exchange, outcome: { ok: true, resolved: { kind: 'fill' }, confidence: 0.9 } });
+    expect(recordEval(dir, scenario, 0, 'resolve', { step, exchange, outcome: { ok: true, resolved: { kind: 'fill' }, confidence: 0.9 } })).toBe(true);
     expect(readFileSync(join(dir, 'login', 'wrong-password', '1.json'), 'utf8')).toBeTruthy();
+  });
+
+  it('is best-effort: a record dir colliding with an existing file returns false instead of throwing', () => {
+    const parent = mkdtempSync(join(tmpdir(), 'jevcumber-record-'));
+    const blockingFile = join(parent, 'not-a-directory');
+    writeFileSync(blockingFile, 'just a file');
+
+    let result: boolean | undefined;
+    expect(() => {
+      result = recordEval(blockingFile, scenario, 0, 'resolve', { step, exchange, outcome: { ok: true, resolved: { kind: 'fill' }, confidence: 0.9 } });
+    }).not.toThrow();
+    expect(result).toBe(false);
   });
 });
