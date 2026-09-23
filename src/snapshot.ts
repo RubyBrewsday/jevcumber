@@ -28,7 +28,7 @@ interface RawElement {
 }
 
 // Runs inside the page: must be self-contained (no references to module scope).
-function collect(): { title: string; text: string; elements: RawElement[] } {
+function collect(): { title: string; text: string; elements: RawElement[]; headings: string[] } {
   const SELECTOR = [
     'a[href]', 'button', 'input:not([type=hidden])', 'select', 'textarea',
     '[role=button]', '[role=link]', '[role=checkbox]', '[role=radio]', '[role=tab]',
@@ -118,7 +118,8 @@ function collect(): { title: string; text: string; elements: RawElement[] } {
   // Site chrome (menus, sidebars, tables of contents) can fill the whole text budget before the
   // content starts, so read the main landmark when the page has one.
   const content = document.querySelector<HTMLElement>('main, [role=main], article') ?? document.body;
-  return { title: document.title, text: clean(content?.innerText), elements };
+  const headings = Array.from(document.querySelectorAll('h1, h2, h3')).map((h) => clean((h as HTMLElement).innerText)).filter(Boolean);
+  return { title: document.title, text: clean(content?.innerText), elements, headings };
 }
 
 // `repeated` holds role+name and text keys that occur more than once on the page: those locators
@@ -135,6 +136,21 @@ function specsFor(raw: RawElement, repeated: Set<string>): LocatorSpec[] {
   if (raw.placeholder) specs.push({ by: 'placeholder', value: raw.placeholder });
   if (raw.text && !repeated.has(textKey(raw))) specs.push({ by: 'text', value: raw.text });
   return specs;
+}
+
+const MAX_EVIDENCE = 40;
+const MAX_EVIDENCE_LENGTH = 80;
+
+// Things a described expectation could be pinned to: what the page says it is about.
+function evidenceOf(raw: { title: string; headings: string[]; elements: RawElement[] }, relevantTo: string): string[] {
+  const items = [
+    raw.title,
+    ...raw.headings,
+    ...raw.elements.filter((e) => e.role === 'link' || e.role === 'button').map((e) => e.name),
+  ]
+    .map((s) => s.trim().slice(0, MAX_EVIDENCE_LENGTH))
+    .filter(Boolean);
+  return mostRelevant([...new Set(items)], relevantTo, (s) => s, MAX_EVIDENCE);
 }
 
 const roleKey = (raw: RawElement) => `role:${raw.role}:${raw.name}`;
@@ -171,7 +187,8 @@ export async function snapshot(page: Page, options: SnapshotOptions = {}): Promi
 async function snapshotOnce(page: Page, options: SnapshotOptions): Promise<Snapshot> {
   const raw = await page.evaluate(collect);
   const text = raw.text.slice(0, MAX_TEXT);
-  if (options.elements === false) return { url: page.url(), title: raw.title, elements: [], text, evidence: [] };
+  const evidence = evidenceOf(raw, options.relevantTo ?? '');
+  if (options.elements === false) return { url: page.url(), title: raw.title, elements: [], text, evidence };
 
   const repeated = repeatedKeys(raw.elements);
   // On a page of links, controls (fields, buttons) are the likelier targets: they win ties.
@@ -205,5 +222,5 @@ async function snapshotOnce(page: Page, options: SnapshotOptions): Promise<Snaps
     elements.push(info);
   }
 
-  return { url: page.url(), title: raw.title, elements, text, evidence: [] };
+  return { url: page.url(), title: raw.title, elements, text, evidence };
 }

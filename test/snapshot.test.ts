@@ -147,4 +147,23 @@ describe('snapshot', () => {
   it('falls back to the whole body when there is no main content landmark', async () => {
     expect((await snapshot(page, { elements: false })).text).toContain('Sign in');
   });
+
+  it('collects evidence: title, headings, link and button names, deduplicated and trimmed', async () => {
+    const p = await browser.newPage();
+    await p.setContent(`<title>Bagel - Wikipedia</title><h1>Bagel</h1><h2>History</h2><h4>ignored</h4>
+      <a href="/a">Bagel</a> <a href="/b">${'x'.repeat(100)}</a> <button>Search</button>`);
+    const { evidence } = await snapshot(p, { elements: false });
+    expect(evidence).toEqual(['Bagel - Wikipedia', 'Bagel', 'History', 'x'.repeat(80), 'Search']);
+    await p.close();
+  });
+
+  it('caps evidence at 40 items ranked by relevance to the step', async () => {
+    const p = await browser.newPage();
+    const links = Array.from({ length: 100 }, (_, i) => `<a href="/${i}">Topic ${i}</a>`).join('');
+    await p.setContent(`<title>T</title><h1>Michelle Obama</h1>${links}`);
+    const { evidence } = await snapshot(p, { relevantTo: 'Then I see an article about Michelle Obama' });
+    expect(evidence.length).toBeLessThanOrEqual(40);
+    expect(evidence).toContain('Michelle Obama');
+    await p.close();
+  });
 });
