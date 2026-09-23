@@ -36,6 +36,15 @@ function collect(value: string, previous: string[]): string[] {
   return [...previous, value];
 }
 
+// The CPU count on its own is a fine default under --frozen (no calls to Jev, just replaying the
+// lockfile as fast as the machine can). A live run additionally caps at 4: Jev has its own rate
+// limits, and more workers than that mostly just queues up concurrent resolve() calls against it.
+// runAll further caps whatever this returns at the scenario count, once it knows it.
+export function defaultWorkers(mode: Mode): number {
+  const cpu = availableParallelism();
+  return mode === 'frozen' ? cpu : Math.min(cpu, 4);
+}
+
 // Installs the browser build that matches the Playwright bundled with jevcumber; a stray
 // `npx playwright install` can fetch a different Playwright and with it the wrong build.
 function installBrowser(extraArgs: string[]): number {
@@ -64,7 +73,11 @@ export async function main(argv: string[]): Promise<number> {
       'record a Playwright trace per scenario; kept under --report-dir for scenarios that did not pass (even with --no-report)',
       false,
     )
-    .option('--workers <n>', 'number of scenarios to run concurrently (default: available CPUs, or 1 with --headed)', parseWorkers)
+    .option(
+      '--workers <n>',
+      'number of scenarios to run concurrently (default: available CPUs under --frozen, capped at 4 otherwise for Jev\'s rate limits; 1 with --headed)',
+      parseWorkers,
+    )
     .option('--config <path>', 'path to a jevcumber.config.js/.mjs (default: the nearest one found walking up from cwd)')
     .option('--reporter <name>', 'reporter to use (console, json, junit); repeatable', collect, [] as string[])
     .option('--output <file>', 'output file for the json/junit reporters (default under --report-dir)')
@@ -99,7 +112,7 @@ export async function main(argv: string[]): Promise<number> {
   const tags = fromCli('tags') ? options.tags : (config.tags ?? options.tags);
   const minConfidence = fromCli('minConfidence') ? options.minConfidence : (config.minConfidence ?? options.minConfidence);
   const reportDir = fromCli('reportDir') ? options.reportDir : (config.reportDir ?? options.reportDir);
-  const workers = fromCli('workers') ? options.workers : (config.workers ?? availableParallelism());
+  const workers = fromCli('workers') ? options.workers : (config.workers ?? defaultWorkers(mode));
 
   const KNOWN_REPORTERS = new Set<ReporterName>(['console', 'json', 'junit']);
   const rawReporterNames = (options.reporter.length > 0 ? options.reporter : ['console']) as ReporterName[];
@@ -150,10 +163,15 @@ export async function main(argv: string[]): Promise<number> {
     }
     return exitCode(results);
   } catch (error) {
+    // A TTY status line (from the console reporter's redraw) can still be sitting on the current
+    // line when a run aborts; clear it first so the error below isn't appended after "3/10
+    // scenarios · ...". Written directly to process.stderr, like the --reporter/--output errors
+    // above, so it's visible to a test spying on process.stderr.write.
+    if (process.stderr.isTTY) process.stderr.write('\r\x1b[K');
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`error: ${message}`);
+    process.stderr.write(`error: ${message}\n`);
     if (/Executable doesn't exist|playwright install/i.test(message)) {
-      console.error('\nThe browser is not installed yet. Run: jevcumber install-browser');
+      process.stderr.write('\nThe browser is not installed yet. Run: jevcumber install-browser\n');
     }
     return 1;
   }

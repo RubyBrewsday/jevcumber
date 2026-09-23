@@ -72,6 +72,33 @@ describe('loadConfig', () => {
     expect(await loadConfig(file)).toEqual({ baseUrl: 'http://b' });
   });
 
+  it('reports a config file not found error before attempting to import it', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'jevcumber-config-'));
+    const missing = join(dir, 'jevcumber.config.mjs');
+    await expect(loadConfig(missing)).rejects.toThrow(`config file not found: ${missing}`);
+  });
+
+  it('rejects an unknown hook name', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'jevcumber-config-'));
+    const file = join(dir, 'jevcumber.config.mjs');
+    writeFileSync(file, 'export default { hooks: { beforeEverything: () => {} } };\n');
+    await expect(loadConfig(file)).rejects.toThrow(/unknown hook "beforeEverything"/);
+  });
+
+  it('gives a clear error for a config with `export default null`', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'jevcumber-config-'));
+    const file = join(dir, 'jevcumber.config.mjs');
+    writeFileSync(file, 'export default null;\n');
+    await expect(loadConfig(file)).rejects.toThrow(/config must export an object/);
+  });
+
+  it('rejects a baseUrl that is not an absolute URL', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'jevcumber-config-'));
+    const file = join(dir, 'jevcumber.config.mjs');
+    writeFileSync(file, 'export default { baseUrl: "/relative" };\n');
+    await expect(loadConfig(file)).rejects.toThrow(/baseUrl must be an absolute URL/);
+  });
+
   it('accepts hooks as an object of functions', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'jevcumber-config-'));
     const file = join(dir, 'jevcumber.config.mjs');

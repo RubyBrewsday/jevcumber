@@ -41,7 +41,7 @@ export function consoleReporter(options: ConsoleReporterOptions = {}): Reporter 
   const writeStatus = options.writeStatus ?? (() => {});
   const isTTY = options.isTTY ?? false;
 
-  let currentFeature: string | undefined;
+  let currentFeatureUri: string | undefined;
   let total = 0;
   let started = 0;
   let ended = 0;
@@ -78,8 +78,10 @@ export function consoleReporter(options: ConsoleReporterOptions = {}): Reporter 
 
       if (isTTY) writeStatus('\r\x1b[K');
 
-      if (result.scenario.feature !== currentFeature) {
-        currentFeature = result.scenario.feature;
+      // Keyed by uri, not the Feature: display name, so two different files that happen to share
+      // a Feature title each still get their own header printed.
+      if (result.scenario.uri !== currentFeatureUri) {
+        currentFeatureUri = result.scenario.uri;
         write(`Feature: ${result.scenario.feature}`);
       }
       write(`  Scenario: ${result.scenario.name}`);

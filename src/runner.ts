@@ -189,6 +189,8 @@ export interface RunOptions {
   hooks?: ConfigHooks;
   /** Test seam: how to obtain the Playwright browser. Defaults to `chromium.launch`. */
   launch?: () => Promise<Browser>;
+  /** Test seam: how a SIGINT during the run terminates the process. Defaults to `process.exit`. */
+  exit?: (code: number) => void;
 }
 
 async function isValid(page: Page, resolved: ResolvedStep): Promise<boolean> {
@@ -215,6 +217,19 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
   };
 
   let completed = false;
+
+  // Ctrl-C mid-run must not lose whatever Jev has already resolved: save every lockfile
+  // (unpruned — the run never got the chance to finish touching every entry, so pruning here
+  // would discard good ones) before the process actually exits.
+  const exit = options.exit ?? ((code: number) => process.exit(code));
+  const onSigint = () => {
+    if (!frozen) {
+      for (const lock of locks.values()) lock.save(false);
+    }
+    exit(130);
+  };
+  process.once('SIGINT', onSigint);
+
   const launch = options.launch ?? (() => chromium.launch({ headless: !options.headed }));
   const browser = await launch();
   const ordered: ScenarioResult[] = new Array(scenarios.length);
@@ -339,6 +354,7 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
       await browser.close();
     }
   } finally {
+    process.removeListener('SIGINT', onSigint);
     // Persist whatever the run resolved even if it aborted, so completed work isn't lost.
     // Pruning is only safe after a complete, unfiltered run; an aborted run saves as-is.
     if (!frozen) {

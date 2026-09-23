@@ -26,7 +26,7 @@ function slug(name: string): string {
 function toStepJson(result: StepResult) {
   const stepResult: { status: string; duration: number; error_message?: string } = {
     status: CUCUMBER_STATUS[result.status],
-    duration: result.durationMs * 1_000_000,
+    duration: Math.round(result.durationMs * 1_000_000),
   };
   if (result.detail) stepResult.error_message = result.detail;
   return {

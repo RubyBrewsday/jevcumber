@@ -76,6 +76,17 @@ describe('consoleReporter', () => {
     expect(lines.indexOf('        evidence: jevcumber-report/a/b/1-failed')).toBeGreaterThan(lines.indexOf('        boom'));
   });
 
+  it('reprints the feature header for a different file even when its Feature name is the same', () => {
+    const lines: string[] = [];
+    const reporter = consoleReporter({ write: (line) => lines.push(line) });
+    const sameNameOtherFile: Scenario = { uri: 'b.feature', feature: 'Login', name: 'other scenario', occurrence: 0, tags: [], steps: [] };
+    reporter.scenarioStart(scenario);
+    reporter.scenarioEnd({ scenario, steps: [] });
+    reporter.scenarioStart(sameNameOtherFile);
+    reporter.scenarioEnd({ scenario: sameNameOtherFile, steps: [] });
+    expect(lines.filter((l) => l === 'Feature: Login')).toHaveLength(2);
+  });
+
   it('buffers steps per scenario and prints the block only when the scenario ends', () => {
     const lines: string[] = [];
     const reporter = consoleReporter({ write: (line) => lines.push(line) });

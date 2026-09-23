@@ -31,6 +31,19 @@ describe('cucumber json', () => {
     expect(json[1].elements[0].steps[0].result.status).toBe('failed');
   });
 
+  it('rounds fractional millisecond durations to whole nanoseconds', () => {
+    const fractional: ScenarioResult[] = [
+      {
+        scenario: { uri: 'features/x.feature', feature: 'X', name: 'frac', occurrence: 0, tags: [], steps: [] },
+        steps: [{ step: { keyword: 'Given', text: 'x' }, status: 'passed', durationMs: 33.333333333333336 }],
+      },
+    ];
+    const json = toCucumberJson(fractional) as any[];
+    const duration = json[0].elements[0].steps[0].result.duration;
+    expect(Number.isInteger(duration)).toBe(true);
+    expect(duration).toBe(Math.round(33.333333333333336 * 1_000_000));
+  });
+
   it('disambiguates same-named scenario outline rows by occurrence in the id', () => {
     const rows: ScenarioResult[] = [
       { scenario: { uri: 'features/x.feature', feature: 'X', name: 'row', occurrence: 0, tags: [], steps: [] }, steps: [] },

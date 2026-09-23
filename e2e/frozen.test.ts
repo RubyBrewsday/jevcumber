@@ -290,6 +290,27 @@ describe('jevcumber --frozen against the fixture app', () => {
     }
   });
 
+  it('clears a TTY status line before printing the top-level error', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'jevcumber-e2e-'));
+    writeFileSync(join(dir, 'broken.feature'), 'this is not valid gherkin at all\n');
+    const writes: string[] = [];
+    const errWrite = vi.spyOn(process.stderr, 'write').mockImplementation((chunk: unknown) => {
+      writes.push(String(chunk));
+      return true;
+    });
+    const isTTY = Object.getOwnPropertyDescriptor(process.stderr, 'isTTY');
+    Object.defineProperty(process.stderr, 'isTTY', { value: true, configurable: true });
+    try {
+      expect(await main([dir, '--base-url', server.url, '--frozen'])).toBe(1);
+      const joined = writes.join('');
+      expect(joined).toContain('\r\x1b[K');
+      expect(joined.indexOf('\r\x1b[K')).toBeLessThan(joined.indexOf('error:'));
+    } finally {
+      errWrite.mockRestore();
+      if (isTTY) Object.defineProperty(process.stderr, 'isTTY', isTTY);
+    }
+  });
+
   it('warns to stderr when --output is given with only the console reporter, but still runs', async () => {
     const { dir } = workspace();
     const errors = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);

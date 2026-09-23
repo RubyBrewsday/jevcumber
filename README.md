@@ -131,7 +131,7 @@ jevcumber <paths...> [options]
 | `--report-dir <dir>` | Where failure evidence goes (default `jevcumber-report`). `--no-report` disables it. |
 | `--trace` | Record a Playwright trace per scenario; keep it for scenarios that did not pass. |
 | `--min-confidence <n>` | Refuse to act below this confidence (default `0.6`; page-sourced values need `0.75`). |
-| `--workers <n>` | Number of scenarios to run concurrently (default: available CPUs, or `1` with `--headed`). |
+| `--workers <n>` | Number of scenarios to run concurrently (default: available CPUs under `--frozen`; capped at `4` otherwise, since Jev has its own rate limits; `1` with `--headed`). |
 | `--config <path>` | Path to `jevcumber.config.js`/`.mjs` (default: the nearest one found walking up from the cwd). |
 | `--reporter <name>` | Reporter to use: `console` (default), `json`, or `junit`. Repeatable to run several at once. |
 | `--output <file>` | Output file for the `json`/`junit` reporters (default: `results.json`/`results.xml` under `--report-dir`). |
@@ -139,7 +139,8 @@ jevcumber <paths...> [options]
 Exit code is `1` if any step failed, was ambiguous, or was undefined.
 
 Runs are **parallel by default**, one worker per scenario up to `--workers` (which defaults to your
-CPU count): pass `--workers 1` to run serially, and `--headed` always implies `1` since it drives a
+CPU count under `--frozen`, or that count capped at `4` otherwise, since Jev has its own rate
+limits): pass `--workers 1` to run serially, and `--headed` always implies `1` since it drives a
 single visible browser window. Console output for a scenario is printed as a whole block as soon as
 that scenario finishes, so scenarios never interleave in the log even when several run at once.
 
@@ -150,7 +151,7 @@ run jevcumber from — it's found by walking up from the current directory, and 
 overrides the search. Any value it sets is a default: the matching CLI flag, when passed, always wins.
 
 ```js
-// jevcumber.config.js
+// jevcumber.config.mjs
 export default {
   baseUrl: 'http://localhost:3000',
   workers: 4,
@@ -250,11 +251,10 @@ anywhere.
 - run: jevcumber features/ --frozen --base-url http://localhost:3000
 ```
 
-## Limits (v0.1)
+## Limits
 
-Scenarios run sequentially. No hooks, iframes, drag and drop, or multi-tab flows yet. A hidden file
-input styled behind a button can't be targeted for upload yet either.
-One action per step. Web UIs only.
+No iframes, drag and drop, or multi-tab flows yet. A hidden file input styled behind a button can't
+be targeted for upload yet either. One action per step. Web UIs only.
 
 ## Development
 

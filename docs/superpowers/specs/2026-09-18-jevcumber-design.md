@@ -204,13 +204,17 @@ Modes:
 
 Step statuses: `passed`, `healed`, `failed`, `ambiguous`, `undefined`,
 `skipped`. After any non-passing, non-healed step the rest of the scenario is
-skipped. Scenarios run sequentially.
+skipped. Scenarios ran sequentially in v0.1; v0.2 Milestone C runs them across
+parallel workers instead. See `2026-09-22-v0.2-milestones-design.md`
+(Milestone C) for the worker pool, config/hooks, reporters, and in-page
+locator uniqueness that superseded this.
 
 ### `cli.ts`
 ```
 jevcumber <paths…> [--base-url <url>]
           [--frozen | --update] [--headed] [--min-confidence <n>] [--tags <expr>]
           [--report-dir <dir>] [--no-report] [--trace]
+          [--workers <n>] [--config <path>] [--reporter <name>] [--output <file>]
 ```
 `--report-dir` (default `jevcumber-report`) is where failure evidence (screenshot + snapshot) and,
 when `--trace` is set, per-scenario traces are written — `--report-dir` applies to traces even under

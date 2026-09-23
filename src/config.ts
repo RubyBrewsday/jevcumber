@@ -26,6 +26,7 @@ export interface Config {
 
 const CONFIG_NAMES = ['jevcumber.config.js', 'jevcumber.config.mjs'];
 const ALLOWED_KEYS = new Set(['baseUrl', 'workers', 'tags', 'minConfidence', 'reportDir', 'hooks']);
+const ALLOWED_HOOKS = new Set(['beforeScenario', 'afterScenario']);
 
 /** Walks up from `from` looking for a `jevcumber.config.js`/`.mjs`, stopping at the filesystem root. */
 export function findConfigFile(from: string): string | undefined {
@@ -42,11 +43,19 @@ export function findConfigFile(from: string): string | undefined {
 }
 
 function validate(config: Record<string, unknown>): Config {
+  if (typeof config !== 'object' || config === null) {
+    throw new Error('config must export an object (a default export, or named exports)');
+  }
   for (const key of Object.keys(config)) {
     if (!ALLOWED_KEYS.has(key)) throw new Error(`unknown config key "${key}"`);
   }
-  if ('baseUrl' in config && typeof config.baseUrl !== 'string') {
-    throw new Error('baseUrl must be a string');
+  if ('baseUrl' in config) {
+    if (typeof config.baseUrl !== 'string') throw new Error('baseUrl must be a string');
+    try {
+      new URL(config.baseUrl);
+    } catch {
+      throw new Error('baseUrl must be an absolute URL, e.g. http://localhost:3000');
+    }
   }
   if ('workers' in config && (!Number.isInteger(config.workers) || (config.workers as number) < 1)) {
     throw new Error('workers must be a positive integer');
@@ -67,6 +76,7 @@ function validate(config: Record<string, unknown>): Config {
     const hooks = config.hooks;
     if (typeof hooks !== 'object' || hooks === null) throw new Error('hooks must be an object');
     for (const [name, value] of Object.entries(hooks)) {
+      if (!ALLOWED_HOOKS.has(name)) throw new Error(`unknown hook "${name}" (expected beforeScenario or afterScenario)`);
       if (typeof value !== 'function') throw new Error(`hooks.${name} must be a function`);
     }
   }
@@ -76,6 +86,7 @@ function validate(config: Record<string, unknown>): Config {
 /** Loads and validates a config file. `path` of `undefined` returns `{}` (no config). */
 export async function loadConfig(path: string | undefined): Promise<Config> {
   if (!path) return {};
+  if (!existsSync(path)) throw new Error(`config file not found: ${path}`);
   const url = pathToFileURL(path);
   // Node's import() cache keys on the URL, so re-loading a config file rewritten at the same path
   // (e.g. between test runs, or a future --watch mode) would otherwise silently return the stale

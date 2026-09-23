@@ -489,4 +489,51 @@ describe('runAll', () => {
       await realBrowser.close();
     }
   });
+
+  it('saves every lockfile without pruning and exits on SIGINT, removing the handler once the run ends', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'jevcumber-'));
+    const featurePath = join(dir, 'sigint.feature');
+    writeFileSync(featurePath, ['Feature: X', '  Scenario: only', '    Given I am on "about:blank"', ''].join('\n'));
+    const [featureScenario] = parseFeature(readFileSync(featurePath, 'utf8'), featurePath);
+    const resolved: ResolvedStep = { kind: 'navigate', value: 'about:blank' };
+    writeFileSync(
+      lockPathFor(featurePath),
+      JSON.stringify({ version: 2, steps: { [stepKey(featureScenario, 0)]: { text: featureScenario.steps[0].text, resolved } } }, null, 2),
+    );
+
+    const realBrowser = await chromium.launch();
+    const exitCalls: number[] = [];
+    const baselineListeners = process.listenerCount('SIGINT');
+    const reporter: Reporter = { scenarioStart: () => {}, step: () => {}, scenarioEnd: () => {}, end: () => {} };
+
+    try {
+      const results = await runAll({
+        paths: [dir],
+        mode: 'default',
+        headed: false,
+        minConfidence: 0.6,
+        reporter,
+        reportDir: join(dir, 'report'),
+        report: false,
+        trace: false,
+        workers: 1,
+        launch: async () => {
+          // A SIGINT handler must already be installed by the time the browser is ready.
+          expect(process.listenerCount('SIGINT')).toBe(baselineListeners + 1);
+          process.emit('SIGINT');
+          return realBrowser;
+        },
+        exit: (code) => exitCalls.push(code),
+      });
+
+      expect(exitCalls).toEqual([130]);
+      expect(results).toHaveLength(1);
+      const saved = JSON.parse(readFileSync(lockPathFor(featurePath), 'utf8'));
+      expect(Object.keys(saved.steps)).toContain(stepKey(featureScenario, 0));
+      // The handler is removed once the run ends: no listener lingers for a later SIGINT.
+      expect(process.listenerCount('SIGINT')).toBe(baselineListeners);
+    } finally {
+      await realBrowser.close();
+    }
+  });
 });
