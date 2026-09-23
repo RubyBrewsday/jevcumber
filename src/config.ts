@@ -76,7 +76,12 @@ function validate(config: Record<string, unknown>): Config {
 /** Loads and validates a config file. `path` of `undefined` returns `{}` (no config). */
 export async function loadConfig(path: string | undefined): Promise<Config> {
   if (!path) return {};
-  const module = (await import(pathToFileURL(path).href)) as Record<string, unknown>;
+  const url = pathToFileURL(path);
+  // Node's import() cache keys on the URL, so re-loading a config file rewritten at the same path
+  // (e.g. between test runs, or a future --watch mode) would otherwise silently return the stale
+  // module. A unique query string forces a fresh import every call.
+  url.search = `t=${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const module = (await import(url.href)) as Record<string, unknown>;
   const raw = 'default' in module ? (module.default as Record<string, unknown>) : { ...module };
   return validate(raw);
 }

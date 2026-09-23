@@ -1,6 +1,6 @@
 import { mkdirSync, rmSync } from 'node:fs';
 import { dirname, join, resolve as resolvePath } from 'node:path';
-import { chromium, type Page } from '@playwright/test';
+import { chromium, type Browser, type Page } from '@playwright/test';
 import { extractValues } from './candidates.js';
 import type { ConfigHooks } from './config.js';
 import { captureStep, scenarioDir, stepDir } from './evidence.js';
@@ -177,6 +177,8 @@ export interface RunOptions {
    *  a headed run against a single visible browser window can't usefully show two scenarios at once. */
   workers: number;
   hooks?: ConfigHooks;
+  /** Test seam: how to obtain the Playwright browser. Defaults to `chromium.launch`. */
+  launch?: () => Promise<Browser>;
 }
 
 async function isValid(page: Page, resolved: ResolvedStep): Promise<boolean> {
@@ -203,7 +205,8 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
   };
 
   let completed = false;
-  const browser = await chromium.launch({ headless: !options.headed });
+  const launch = options.launch ?? (() => chromium.launch({ headless: !options.headed }));
+  const browser = await launch();
   const ordered: ScenarioResult[] = new Array(scenarios.length);
   try {
     try {
@@ -277,7 +280,6 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
               // best-effort, same as screenshot/snapshot capture: a trace failure must not abort the run
             }
           }
-          options.reporter.scenarioEnd?.(result);
           return result;
         } finally {
           await context.close();
@@ -292,8 +294,13 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
         while (next < scenarios.length) {
           const index = next++;
           const scenario = scenarios[index];
+          // scenarioEnd is emitted exactly once per scenario, here in the worker rather than
+          // inside runOne, so a crash after runOne has already produced (but not yet returned)
+          // a result can never cause it to fire twice.
           try {
-            ordered[index] = await runOne(scenario);
+            const result = await runOne(scenario);
+            ordered[index] = result;
+            options.reporter.scenarioEnd?.(result);
           } catch (error) {
             // A worker crash on one scenario (e.g. context creation failing) must not take down
             // the others still in the queue.
@@ -301,8 +308,8 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
               scenario,
               steps: [{ step: { keyword: 'Given', text: scenario.name }, status: 'failed', detail: message(error), durationMs: 0 }],
             };
-            options.reporter.scenarioEnd?.(failedResult);
             ordered[index] = failedResult;
+            options.reporter.scenarioEnd?.(failedResult);
           }
         }
       };

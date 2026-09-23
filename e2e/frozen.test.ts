@@ -223,6 +223,19 @@ describe('jevcumber --frozen against the fixture app', () => {
     expect(seen).toEqual(scenarios.map((s) => s.name).sort());
   });
 
+  it('a --base-url passed on the CLI wins over jevcumber.config.mjs', async () => {
+    const { dir } = workspace();
+    writeFileSync(join(dir, 'jevcumber.config.mjs'), 'export default { baseUrl: "http://wrong.invalid" };\n');
+
+    const originalCwd = process.cwd();
+    process.chdir(dir);
+    try {
+      expect(await main([dir, '--base-url', server.url, '--frozen'])).toBe(0);
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
   it('--reporter json and junit write files', async () => {
     const { dir } = workspace();
     const reportDir = join(dir, 'r');

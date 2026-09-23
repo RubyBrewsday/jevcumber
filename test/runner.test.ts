@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { Lockfile, stepKey } from '../src/lockfile.js';
+import { chromium, type Browser } from '@playwright/test';
+import { parseFeature } from '../src/gherkin.js';
+import { Lockfile, lockPathFor, stepKey } from '../src/lockfile.js';
 import { runAll, runScenario, type Reporter, type ScenarioDeps } from '../src/runner.js';
-import type { ResolveOutcome, ResolvedStep, Scenario } from '../src/types.js';
+import type { ResolveOutcome, ResolvedStep, Scenario, ScenarioResult } from '../src/types.js';
 
 const scenario: Scenario = {
   uri: 'a.feature', feature: 'A', name: 's', occurrence: 0, tags: [],
@@ -358,5 +360,88 @@ describe('runAll', () => {
     });
     expect(results).toEqual([]);
     expect(calls).toEqual([]);
+  });
+
+  it('continues the queue and keeps results in scenario order when one scenario crashes', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'jevcumber-'));
+    const featurePath = join(dir, 'crash.feature');
+    writeFileSync(
+      featurePath,
+      ['Feature: Crash', '  Scenario: first', '    Given I am on "about:blank"', '  Scenario: second', '    Given I am on "about:blank"', ''].join(
+        '\n',
+      ),
+    );
+    const featureScenarios = parseFeature(readFileSync(featurePath, 'utf8'), featurePath);
+    const resolved: ResolvedStep = { kind: 'navigate', value: 'about:blank' };
+    const entries = Object.fromEntries(
+      featureScenarios.map((s) => [stepKey(s, 0), { text: s.steps[0].text, resolved }]),
+    );
+    writeFileSync(lockPathFor(featurePath), JSON.stringify({ version: 2, steps: entries }, null, 2));
+
+    // Wrap a real browser in a Proxy whose newContext() rejects on the 2nd call, simulating a
+    // per-scenario crash (e.g. the browser process dying mid-run) without touching real Playwright
+    // internals. Methods are rebound to the real target: a Proxy call binds `this` to the proxy by
+    // default, which breaks classes (like Playwright's Browser) that rely on `this` in private fields.
+    const realBrowser = await chromium.launch();
+    let contextCalls = 0;
+    const crashingBrowser = new Proxy(realBrowser, {
+      get(target, prop, _receiver) {
+        if (prop === 'newContext') {
+          return async (...args: unknown[]) => {
+            contextCalls++;
+            if (contextCalls === 2) throw new Error('synthetic crash');
+            return target.newContext(...(args as Parameters<Browser['newContext']>));
+          };
+        }
+        const value = Reflect.get(target, prop, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+
+    const endCalls: ScenarioResult[][] = [];
+    const scenarioEndCalls: ScenarioResult[] = [];
+    const reporter: Reporter = {
+      scenarioStart: () => {},
+      step: () => {},
+      scenarioEnd: (result) => scenarioEndCalls.push(result),
+      end: (results) => endCalls.push(results),
+    };
+
+    try {
+      const results = await runAll({
+        paths: [dir],
+        mode: 'default',
+        headed: false,
+        minConfidence: 0.6,
+        reporter,
+        reportDir: join(dir, 'report'),
+        report: false,
+        trace: false,
+        workers: 1, // deterministic: the single worker processes scenarios in file order
+        launch: async () => crashingBrowser as unknown as Browser,
+      });
+
+      expect(results).toHaveLength(2);
+      expect(results[0].scenario.name).toBe('first');
+      expect(results[0].steps[0].status).toBe('passed');
+      expect(results[1].scenario.name).toBe('second');
+      expect(results[1].steps).toEqual([
+        { step: { keyword: 'Given', text: 'second' }, status: 'failed', detail: expect.stringContaining('synthetic crash'), durationMs: 0 },
+      ]);
+
+      // scenarioEnd fires exactly once per scenario, and end() is called exactly once with the
+      // full, scenario-ordered result set.
+      expect(scenarioEndCalls).toHaveLength(2);
+      expect(endCalls).toHaveLength(1);
+      expect(endCalls[0]).toEqual(results);
+
+      // The lockfile is still saved despite the crash: the first scenario's cached entry survives
+      // (the second scenario crashed before it ever reached the lockfile, so its untouched entry
+      // is pruned on this complete, unfiltered run — the save itself must not be skipped or corrupted).
+      const saved = JSON.parse(readFileSync(lockPathFor(featurePath), 'utf8'));
+      expect(Object.keys(saved.steps)).toEqual([stepKey(featureScenarios[0], 0)]);
+    } finally {
+      await realBrowser.close();
+    }
   });
 });

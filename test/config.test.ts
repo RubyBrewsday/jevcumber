@@ -62,6 +62,16 @@ describe('loadConfig', () => {
     await expect(loadConfig(file)).rejects.toThrow(/minConfidence/);
   });
 
+  it('re-imports a config file rewritten at the same path instead of returning a stale cached module', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'jevcumber-config-'));
+    const file = join(dir, 'jevcumber.config.mjs');
+    writeFileSync(file, 'export default { baseUrl: "http://a" };\n');
+    expect(await loadConfig(file)).toEqual({ baseUrl: 'http://a' });
+
+    writeFileSync(file, 'export default { baseUrl: "http://b" };\n');
+    expect(await loadConfig(file)).toEqual({ baseUrl: 'http://b' });
+  });
+
   it('accepts hooks as an object of functions', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'jevcumber-config-'));
     const file = join(dir, 'jevcumber.config.mjs');
