@@ -76,6 +76,7 @@ export interface StepResult {
   detail?: string;
   note?: string;
   evidenceDir?: string;
+  durationMs: number;
 }
 
 export interface ExecuteResult {

@@ -70,6 +70,59 @@ describe('snapshot', () => {
     }
   });
 
+  it('does not let a hidden duplicate hide a visible control (role locator ignores hidden matches)', async () => {
+    const p = await browser.newPage();
+    await p.setContent(`
+      <title>Hidden dup</title>
+      <nav style="display:none"><a href="/a">Pricing</a><button>Buy</button><label>Email <input></label></nav>
+      <a href="/a">Pricing</a><button>Buy</button><label>Email <input></label>
+    `);
+    const { elements } = await snapshot(p);
+    const byName = Object.fromEntries(elements.map((e) => [e.name, e]));
+    expect(byName['Pricing']).toMatchObject({ role: 'link', locator: { by: 'role', role: 'link', name: 'Pricing' } });
+    expect(byName['Buy']).toMatchObject({ role: 'button', locator: { by: 'role', role: 'button', name: 'Buy' } });
+    expect(byName['Email']).toMatchObject({ role: 'textbox', locator: { by: 'role', role: 'textbox', name: 'Email' } });
+    await p.close();
+  });
+
+  it('verifies at most one locator per element with Playwright', async () => {
+    // Four password fields share the label "Password": none is uniquely locatable, so all are
+    // omitted. The one link is unique by role+name. A naive implementation still spends a round
+    // trip on each duplicate label before giving up; computing uniqueness in-page should spend
+    // none.
+    const DUP_LABEL_HTML = `
+      <title>Dup</title>
+      <label>Password <input type="password"></label>
+      <label>Password <input type="password"></label>
+      <label>Password <input type="password"></label>
+      <label>Password <input type="password"></label>
+      <button>Save</button>
+      <button>Save</button>
+      <a href="/dup1">Duplicate text</a><a href="/dup2">Duplicate text</a>
+      <a href="/x">Only Link</a>
+    `;
+    const p = await browser.newPage();
+    await p.setContent(DUP_LABEL_HTML);
+    let counts = 0;
+    const proxied = new Proxy(p, {
+      get(target, prop, receiver) {
+        const value = Reflect.get(target, prop, receiver);
+        if (typeof value !== 'function') return value;
+        if (['getByRole', 'getByLabel', 'getByTestId', 'getByPlaceholder', 'getByText'].includes(String(prop))) {
+          return (...args: unknown[]) => {
+            const locator = (value as Function).apply(target, args);
+            return new Proxy(locator, { get(t, k, r) { const v = Reflect.get(t, k, r); if (k === 'count') return async () => { counts++; return v.call(t); }; return typeof v === 'function' ? v.bind(t) : v; } });
+          };
+        }
+        return value.bind(target);
+      },
+    });
+    const snap = await snapshot(proxied as unknown as Page);
+    expect(counts).toBeLessThanOrEqual(snap.elements.length + 2);
+    expect(snap.elements.map((e) => e.name)).toEqual(['Only Link']);
+    await p.close();
+  });
+
   it('truncates page text to 8000 characters', async () => {
     const long = await browser.newPage();
     await long.setContent(`<p>${'word '.repeat(5000)}</p>`);

@@ -2,9 +2,12 @@
 import { spawnSync } from 'node:child_process';
 import { realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { availableParallelism } from 'node:os';
 import { pathToFileURL } from 'node:url';
 import { Command, InvalidArgumentError } from 'commander';
-import { consoleReporter, exitCode } from './reporter.js';
+import { findConfigFile, loadConfig } from './config.js';
+import { exitCode } from './reporter.js';
+import { createReporters, type ReporterName } from './reporters/index.js';
 import { runAll } from './runner.js';
 import type { Mode } from './types.js';
 
@@ -21,6 +24,25 @@ function parseBaseUrl(raw: string): string {
     throw new InvalidArgumentError('must be an absolute URL, e.g. http://localhost:3000');
   }
   return raw;
+}
+
+function parseWorkers(raw: string): number {
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value < 1) throw new InvalidArgumentError('must be a positive integer');
+  return value;
+}
+
+function collect(value: string, previous: string[]): string[] {
+  return [...previous, value];
+}
+
+// The CPU count on its own is a fine default under --frozen (no calls to Jev, just replaying the
+// lockfile as fast as the machine can). A live run additionally caps at 4: Jev has its own rate
+// limits, and more workers than that mostly just queues up concurrent resolve() calls against it.
+// runAll further caps whatever this returns at the scenario count, once it knows it.
+export function defaultWorkers(mode: Mode): number {
+  const cpu = availableParallelism();
+  return mode === 'frozen' ? cpu : Math.min(cpu, 4);
 }
 
 // Installs the browser build that matches the Playwright bundled with jevcumber; a stray
@@ -51,6 +73,14 @@ export async function main(argv: string[]): Promise<number> {
       'record a Playwright trace per scenario; kept under --report-dir for scenarios that did not pass (even with --no-report)',
       false,
     )
+    .option(
+      '--workers <n>',
+      'number of scenarios to run concurrently (default: available CPUs under --frozen, capped at 4 otherwise for Jev\'s rate limits; 1 with --headed)',
+      parseWorkers,
+    )
+    .option('--config <path>', 'path to a jevcumber.config.js/.mjs (default: the nearest one found walking up from cwd)')
+    .option('--reporter <name>', 'reporter to use (console, json, junit); repeatable', collect, [] as string[])
+    .option('--output <file>', 'output file for the json/junit reporters (default under --report-dir)')
     .addHelpText('after', '\nFirst time? Run `jevcumber install-browser` to download the Chromium build jevcumber drives.')
     .exitOverride();
 
@@ -68,18 +98,64 @@ export async function main(argv: string[]): Promise<number> {
   }
   const mode: Mode = options.frozen ? 'frozen' : options.update ? 'update' : 'default';
 
+  let config;
+  try {
+    const configPath = program.getOptionValueSource('config') === 'cli' ? options.config : findConfigFile(process.cwd());
+    config = await loadConfig(configPath);
+  } catch (error) {
+    console.error(`error: ${error instanceof Error ? error.message : String(error)}`);
+    return 1;
+  }
+
+  const fromCli = (name: string) => program.getOptionValueSource(name) === 'cli';
+  const baseUrl = fromCli('baseUrl') ? options.baseUrl : (config.baseUrl ?? options.baseUrl);
+  const tags = fromCli('tags') ? options.tags : (config.tags ?? options.tags);
+  const minConfidence = fromCli('minConfidence') ? options.minConfidence : (config.minConfidence ?? options.minConfidence);
+  const reportDir = fromCli('reportDir') ? options.reportDir : (config.reportDir ?? options.reportDir);
+  const workers = fromCli('workers') ? options.workers : (config.workers ?? defaultWorkers(mode));
+
+  const KNOWN_REPORTERS = new Set<ReporterName>(['console', 'json', 'junit']);
+  const rawReporterNames = (options.reporter.length > 0 ? options.reporter : ['console']) as ReporterName[];
+  for (const name of rawReporterNames) {
+    if (!KNOWN_REPORTERS.has(name)) {
+      // Written directly to process.stderr (not console.error), which binds its stream at
+      // startup: a test spying on process.stderr.write to assert on CLI errors would otherwise
+      // never see console.error's output.
+      process.stderr.write(`error: unknown reporter "${name}" (expected console, json, or junit)\n`);
+      return 1;
+    }
+  }
+  // De-duplicate before launching anything: `--reporter json --reporter json` must not write the
+  // same file twice (or, worse, be treated as "two file reporters" by the --output check below).
+  const reporterNames = [...new Set(rawReporterNames)];
+  const fileReporters = reporterNames.filter((name) => name === 'json' || name === 'junit');
+  if (options.output && fileReporters.length > 1) {
+    process.stderr.write('error: --output applies to a single file reporter; use --report-dir for several\n');
+    return 1;
+  }
+  if (options.output && fileReporters.length === 0) {
+    process.stderr.write('warning: --output has no effect without a json or junit reporter\n');
+  }
+
   try {
     const results = await runAll({
       paths: program.args,
-      baseUrl: options.baseUrl,
+      baseUrl,
       mode,
       headed: options.headed,
-      minConfidence: options.minConfidence,
-      tags: options.tags,
-      reporter: consoleReporter(),
-      reportDir: options.reportDir,
+      minConfidence,
+      tags,
+      reporter: createReporters(reporterNames, {
+        output: options.output,
+        reportDir,
+        isTTY: process.stderr.isTTY === true,
+        writeStatus: (s) => process.stderr.write(s),
+      }),
+      reportDir,
       report: options.report !== false,
       trace: options.trace,
+      workers,
+      hooks: config.hooks,
     });
     if (results.length === 0) {
       console.error('error: no scenarios found');
@@ -87,10 +163,15 @@ export async function main(argv: string[]): Promise<number> {
     }
     return exitCode(results);
   } catch (error) {
+    // A TTY status line (from the console reporter's redraw) can still be sitting on the current
+    // line when a run aborts; clear it first so the error below isn't appended after "3/10
+    // scenarios · ...". Written directly to process.stderr, like the --reporter/--output errors
+    // above, so it's visible to a test spying on process.stderr.write.
+    if (process.stderr.isTTY) process.stderr.write('\r\x1b[K');
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`error: ${message}`);
+    process.stderr.write(`error: ${message}\n`);
     if (/Executable doesn't exist|playwright install/i.test(message)) {
-      console.error('\nThe browser is not installed yet. Run: jevcumber install-browser');
+      process.stderr.write('\nThe browser is not installed yet. Run: jevcumber install-browser\n');
     }
     return 1;
   }
