@@ -195,7 +195,7 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
     }
   }
   if (values.length > 0 || (elements.length > 0 && snapshot.evidence.length > 0)) {
-    const literalOptions = Object.fromEntries(values.map((value, i) => [`v${i + 1}`, { literal: value }]));
+    const literalOptions = Object.fromEntries(Object.entries(valueById).map(([id, value]) => [id, { literal: value }]));
     const pageTextOptions =
       elements.length > 0 ? Object.fromEntries(Object.entries(pageTextById).map(([id, t]) => [id, { page_text: t }])) : {};
     questions.input_text = choice(INPUT_TEXT_INSTRUCTIONS, { ...literalOptions, ...pageTextOptions, none: INPUT_TEXT_NONE });
@@ -209,7 +209,7 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
   }
 
   // Record every answer we actually rely on; confidence is the least certain of these.
-  const consumed: { id: string; answer: ChoiceAnswer }[] = [];
+  const consumed: { id: string; answer: ChoiceAnswer; pageSourced?: boolean }[] = [];
   const pick = (id: string): string | undefined => {
     const answer = answers[id] as ChoiceAnswer | undefined;
     if (!answer) return undefined;
@@ -220,12 +220,12 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
     const id = pick('element');
     return elements.find((element) => element.id === id);
   };
-  let pageSourced = false;
   const pickValue = (question: ValueQuestionId) => {
     const id = pick(question);
     if (id === undefined) return undefined;
     if (id in pageTextById) {
-      pageSourced = true;
+      const entry = consumed.find((e) => e.id === question);
+      if (entry) entry.pageSourced = true;
       return pageTextById[id];
     }
     return valueById[id];
@@ -304,9 +304,17 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
     }
   }
 
-  const weakest = consumed.reduce((low, entry) => (entry.answer.confidence < low.answer.confidence ? entry : low));
-  const bar = pageSourced ? Math.max(minConfidence, PAGE_SOURCED_MIN_CONFIDENCE) : minConfidence;
-  if (weakest.answer.confidence < bar) {
+  // Each answer is held to its own bar: a page-sourced pick (a `p…` id) needs the higher
+  // page-sourced confidence; every other answer keeps the caller's minConfidence.
+  const withBar = consumed.map((entry) => ({
+    entry,
+    bar: entry.pageSourced ? Math.max(minConfidence, PAGE_SOURCED_MIN_CONFIDENCE) : minConfidence,
+  }));
+  const failing = withBar.filter(({ entry, bar }) => entry.answer.confidence < bar);
+  if (failing.length > 0) {
+    const { entry: weakest, bar } = failing.reduce((worst, cur) =>
+      cur.bar - cur.entry.answer.confidence > worst.bar - worst.entry.answer.confidence ? cur : worst,
+    );
     const describe = (label: string): string => {
       const element = elements.find((e) => e.id === label);
       if (weakest.id === 'element' && element) return `${element.role} "${element.name}"`;
@@ -326,7 +334,8 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
     };
   }
 
-  return { ok: true, resolved, confidence: weakest.answer.confidence };
+  const confidence = Math.min(...consumed.map((entry) => entry.answer.confidence));
+  return { ok: true, resolved, confidence };
 }
 
 /** Does the page satisfy a described expectation — and which page item shows it? */

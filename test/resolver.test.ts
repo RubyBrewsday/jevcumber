@@ -287,4 +287,14 @@ describe('resolve: page-sourced values', () => {
     const literal = await resolve(input(when('I search for "x"'), fakeClient({ ...fill, input_text: answer('v1', 0.7) }).client, ['x'], snap));
     expect(literal).toMatchObject({ ok: true });
   });
+
+  it('holds each answer to its own bar: a confident page-sourced pick does not raise the bar for an unrelated weak answer', async () => {
+    const { client } = fakeClient({
+      kind: answer('fill', 0.99),
+      element: answer('e1', 0.7),
+      input_text: answer('p1', 0.95),
+    });
+    const outcome = await resolve(input(when('I search for his wife'), client, [], snap));
+    expect(outcome).toMatchObject({ ok: true, confidence: 0.7 });
+  });
 });
