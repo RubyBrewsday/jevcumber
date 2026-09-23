@@ -55,7 +55,7 @@ describe('resolve: request shape', () => {
       ['after_typing', 'assertion', 'element', 'expected_text', 'input_text', 'key', 'kind', 'target_url'],
     );
     expect(Object.keys(questions.kind.criteria)).toEqual(
-      ['navigate', 'click', 'fill', 'select', 'check', 'uncheck', 'press', 'assert', 'none'],
+      ['navigate', 'click', 'fill', 'select', 'check', 'uncheck', 'press', 'hover', 'clear', 'upload', 'scroll', 'wait', 'assert', 'none'],
     );
     expect(Object.keys(questions.element.criteria)).toEqual(['e1', 'e2', 'none']);
     for (const id of ['target_url', 'input_text', 'expected_text']) {
@@ -141,10 +141,58 @@ describe('resolve: mapping answers to steps', () => {
       ['a@b.c'], { kind: 'assert', assertion: { form: 'element_has_value', locator: SNAP.elements[0].locator, value: 'a@b.c' } }],
     ['assert semantic', { kind: answer('assert'), assertion: answer('semantic') }, [],
       { kind: 'assert', assertion: { form: 'semantic' } }],
+    ['hover', { kind: answer('hover'), element: answer('e2') }, [], { kind: 'hover', locator: SNAP.elements[1].locator }],
+    ['clear', { kind: answer('clear'), element: answer('e1') }, [], { kind: 'clear', locator: SNAP.elements[0].locator }],
+    ['scroll', { kind: answer('scroll'), element: answer('e2') }, [], { kind: 'scroll', locator: SNAP.elements[1].locator }],
+    ['upload', { kind: answer('upload'), element: answer('e1'), input_text: answer('v1') }, ['photo.png'], { kind: 'upload', locator: SNAP.elements[0].locator, value: 'photo.png' }],
+    ['wait for text', { kind: answer('wait'), expected_text: answer('v1') }, ['Done'], { kind: 'wait', text: 'Done' }],
+    ['wait for network', { kind: answer('wait') }, [], { kind: 'wait' }],
   ];
   it.each(cases)('%s', async (_name, answers, values, expected) => {
     const outcome = await resolve(input(when('step'), fakeClient(answers).client, values));
     expect(outcome).toMatchObject({ ok: true, resolved: expected });
+  });
+
+  it('waits for a quoted number as text, not as seconds', async () => {
+    const outcome = await resolve(
+      input(when('I wait for "3" to appear'), fakeClient({ kind: answer('wait'), expected_text: answer('v1') }).client, ['3']),
+    );
+    expect(outcome).toMatchObject({ ok: true, resolved: { kind: 'wait', text: '3' } });
+  });
+
+  it('prefers expected_text over a bare number elsewhere in the step', async () => {
+    const outcome = await resolve(
+      input(when('I wait up to 10 seconds for "Done" to appear'), fakeClient({ kind: answer('wait'), expected_text: answer('v2') }).client, ['10', 'Done']),
+    );
+    expect(outcome).toMatchObject({ ok: true, resolved: { kind: 'wait', text: 'Done' } });
+  });
+
+  it('does not mistake a number inside a path for a wait duration', async () => {
+    const outcome = await resolve(input(when('I wait for /page/2 to load'), fakeClient({ kind: answer('wait') }).client, []));
+    expect(outcome).toMatchObject({ ok: true, resolved: { kind: 'wait' } });
+  });
+
+  it('does not mistake a number inside a host:port for a wait duration', async () => {
+    const outcome = await resolve(input(when('I wait until localhost:3000 is up'), fakeClient({ kind: answer('wait') }).client, []));
+    expect(outcome).toMatchObject({ ok: true, resolved: { kind: 'wait' } });
+  });
+
+  it('is undefined when a wait has a literal that names an element rather than text or seconds', async () => {
+    const outcome = await resolve(
+      input(when('I wait for the login button'), fakeClient({ kind: answer('wait'), expected_text: answer('none') }).client, ['login button']),
+    );
+    expect(outcome).toMatchObject({ ok: false, reason: 'undefined' });
+    expect((outcome as { detail: string }).detail).toMatch(/wait needs text to wait for in quotes, or a number of seconds/);
+  });
+
+  it('waits seconds only for a bare number in the step text', async () => {
+    const outcome = await resolve(input(when('I wait 3 seconds'), fakeClient({ kind: answer('wait') }).client, ['3']));
+    expect(outcome).toMatchObject({ ok: true, resolved: { kind: 'wait', seconds: 3 } });
+  });
+
+  it('caps a numeric wait at 30 seconds', async () => {
+    const outcome = await resolve(input(when('I wait 90 seconds'), fakeClient({ kind: answer('wait') }).client, ['90']));
+    expect(outcome).toMatchObject({ ok: true, resolved: { kind: 'wait', seconds: 30 } });
   });
 
   it('reports the minimum confidence across only the answers it consumed', async () => {
@@ -159,6 +207,30 @@ describe('resolve: mapping answers to steps', () => {
     });
     const outcome = await resolve(input(when('I click Log in'), client, ['x']));
     expect(outcome).toEqual({ ok: true, resolved: { kind: 'click', locator: SNAP.elements[1].locator }, confidence: 0.7 });
+  });
+});
+
+describe('resolve: fill on a combobox becomes select', () => {
+  it('resolves to select, not fill, and never asks after_typing/submit, when the picked element is a combobox', async () => {
+    const combobox: ElementInfo = { id: 'e1', role: 'combobox', name: 'Country', locator: { by: 'role', role: 'combobox', name: 'Country' } };
+    const snap: Snapshot = { ...SNAP, elements: [combobox] };
+    const { client } = fakeClient({ kind: answer('fill'), element: answer('e1'), input_text: answer('v1'), after_typing: answer('submit', 0.9) });
+    const outcome = await resolve(input(when('I select "France" from the Country dropdown'), client, ['France'], snap));
+    expect(outcome).toEqual({
+      ok: true,
+      resolved: { kind: 'select', locator: combobox.locator, value: 'France' },
+      confidence: 0.95,
+    });
+  });
+});
+
+describe('resolve: upload never takes a page-sourced path', () => {
+  it('is undefined when the only candidate for input_text is page text, not a literal', async () => {
+    const snap: Snapshot = { ...SNAP, evidence: [{ text: 'Michelle Obama', kind: 'heading' }] };
+    const { client } = fakeClient({ kind: answer('upload'), element: answer('e1'), input_text: answer('p1', 0.9) });
+    const outcome = await resolve(input(when('I upload a photo of his wife'), client, [], snap));
+    expect(outcome).toMatchObject({ ok: false, reason: 'undefined' });
+    expect((outcome as { detail: string }).detail).toMatch(/Name the file to upload in quotes/);
   });
 });
 
@@ -280,6 +352,21 @@ describe('judge', () => {
   it('throws on a malformed response instead of silently coercing a bad value to a number', async () => {
     const { client } = fakeClient({ holds: { type: 'noul', noul: 'yes' } });
     await expect(judge(client, 'x', snap)).rejects.toThrow(/no answer for "holds"/);
+  });
+});
+
+describe('resolve: wait does not consult the text question needlessly', () => {
+  it('treats a step whose only literal is the number as seconds without asking about text', async () => {
+    const { client, requests } = fakeClient({ kind: answer('wait'), expected_text: answer('none', 0.2) });
+    const outcome = await resolve(input(when('I wait 1 second'), client, ['1']));
+    expect(outcome).toMatchObject({ ok: true, resolved: { kind: 'wait', seconds: 1 } });
+    expect(requests).toHaveLength(1);
+  });
+
+  it('does not count a low-confidence none for text when it falls back to seconds', async () => {
+    const { client } = fakeClient({ kind: answer('wait'), expected_text: answer('none', 0.2) });
+    const outcome = await resolve(input(when('I wait 2 seconds for "the results"'), client, ['2', 'the results']));
+    expect(outcome).toMatchObject({ ok: true, resolved: { kind: 'wait', seconds: 2 } });
   });
 });
 

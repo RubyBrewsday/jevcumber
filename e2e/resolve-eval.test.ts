@@ -74,6 +74,7 @@ describe.skipIf(!process.env.TYPESAFE_API_KEY)('Jev resolves the fixture steps t
         await execute(page, expected, {
           baseUrl: server.url,
           stepText: step.text,
+          featureDir: 'fixtures/eval',
           judge: async (text) => {
             const verdict = await judge(real, text, await snapshot(page, { elements: false, relevantTo: text }));
             lines.push(`       judge            holds ${verdict.holds.toFixed(2)}  evidence=${JSON.stringify(verdict.evidence ?? null)} (${(verdict.evidenceConfidence ?? 0).toFixed(2)})`);

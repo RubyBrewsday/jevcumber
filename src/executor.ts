@@ -1,3 +1,4 @@
+import { resolve as resolvePath } from 'node:path';
 import { expect, type Locator, type Page } from '@playwright/test';
 import { toLocator } from './locators.js';
 import type { Judgment } from './resolver.js';
@@ -8,10 +9,8 @@ export const SEMANTIC_THRESHOLD = 0.8;
 // that say the same thing legitimately split the probability between them.
 export const PIN_MIN_CONFIDENCE = 0.5;
 const ASSERT_TIMEOUT = 5000;
-// Try selecting by visible label first (what a step's literal usually names); fall back to the
-// option's value for cases like <option value="fr">Republique</option>. The label attempt gets a
-// short timeout so a value-only step doesn't pay the full default timeout before falling back.
-const SELECT_LABEL_TIMEOUT = 1000;
+export const WAIT_FOR_TEXT_TIMEOUT = 15_000;
+export const MAX_WAIT_SECONDS = 30;
 
 export interface ExecuteContext {
   /** What relative navigation resolves against. Optional: steps may name full URLs instead. */
@@ -19,11 +18,13 @@ export interface ExecuteContext {
   stepText: string;
   /** Judges whether the page satisfies stepText. Absent in --frozen mode. */
   judge?: (stepText: string) => Promise<Judgment>;
+  /** Directory an `upload` step's file path resolves against. Falls back to process.cwd(). */
+  featureDir?: string;
 }
 
 /** Locators the runner should validate before replaying a cached step. Assertions are left to expect's auto-wait. */
 export function actionLocators(resolved: ResolvedStep): LocatorSpec[] {
-  if (resolved.kind === 'navigate' || resolved.kind === 'assert') return [];
+  if (resolved.kind === 'navigate' || resolved.kind === 'assert' || resolved.kind === 'wait') return [];
   return resolved.locator ? [resolved.locator] : [];
 }
 
@@ -49,16 +50,29 @@ async function settle(page: Page): Promise<void> {
   await page.waitForLoadState('networkidle', { timeout: 500 }).catch(() => {});
 }
 
+// Reads the <option>s once and picks in a fixed order: exact label, exact value, then a 1-based
+// index (so "the 2nd option" reads naturally) — instead of firing a selectOption per strategy and
+// paying a timeout for each miss.
 async function select(locator: Locator, value: string): Promise<void> {
-  try {
-    await locator.selectOption({ label: value }, { timeout: SELECT_LABEL_TIMEOUT });
-  } catch (labelError) {
-    try {
-      await locator.selectOption({ value });
-    } catch {
-      throw labelError;
+  const options = await locator.locator('option').evaluateAll((els) =>
+    els.map((o) => ({ label: (o as HTMLOptionElement).label || o.textContent?.trim() || '', value: (o as HTMLOptionElement).value })),
+  );
+  if (options.some((o) => o.label === value)) {
+    await locator.selectOption({ label: value });
+    return;
+  }
+  if (options.some((o) => o.value === value)) {
+    await locator.selectOption({ value });
+    return;
+  }
+  if (/^\d+$/.test(value)) {
+    const index = Number(value);
+    if (index >= 1 && index <= options.length) {
+      await locator.selectOption({ index: index - 1 });
+      return;
     }
   }
+  throw new Error(`No option labelled or valued "${value}" (options: ${options.map((o) => o.label).join(', ')})`);
 }
 
 async function check(page: Page, assertion: Assertion, ctx: ExecuteContext): Promise<ExecuteResult> {
@@ -142,6 +156,27 @@ export async function execute(page: Page, resolved: ResolvedStep, ctx: ExecuteCo
     case 'press':
       if (resolved.locator) await toLocator(page, resolved.locator).press(resolved.key);
       else await page.keyboard.press(resolved.key);
+      break;
+    case 'hover':
+      await toLocator(page, resolved.locator).hover();
+      break;
+    case 'clear':
+      await toLocator(page, resolved.locator).fill('');
+      break;
+    case 'scroll':
+      await toLocator(page, resolved.locator).scrollIntoViewIfNeeded();
+      break;
+    case 'upload':
+      await toLocator(page, resolved.locator).setInputFiles(resolvePath(ctx.featureDir ?? process.cwd(), resolved.value));
+      break;
+    case 'wait':
+      if (resolved.text !== undefined) {
+        await expect(page.getByText(resolved.text).first()).toBeVisible({ timeout: WAIT_FOR_TEXT_TIMEOUT });
+      } else if (resolved.seconds !== undefined) {
+        await page.waitForTimeout(Math.min(resolved.seconds, MAX_WAIT_SECONDS) * 1000);
+      } else {
+        await page.waitForLoadState('networkidle', { timeout: WAIT_FOR_TEXT_TIMEOUT }).catch(() => {});
+      }
       break;
     case 'assert':
       return check(page, resolved.assertion, ctx);

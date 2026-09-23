@@ -1,4 +1,6 @@
 import { TypeSafeClient, choice, noul } from '@typesafe-ai/sdk';
+import { QUOTED } from './candidates.js';
+import { MAX_WAIT_SECONDS } from './executor.js';
 import { mostRelevant } from './relevance.js';
 import type { Assertion, ElementInfo, ResolveOutcome, ResolvedStep, Snapshot, Step } from './types.js';
 
@@ -44,9 +46,25 @@ const KIND = {
   check: 'Turn a checkbox, radio button, or switch on.',
   uncheck: 'Turn a checkbox or switch off.',
   press: 'Press a single keyboard key such as Enter, Tab, or Escape.',
+  hover: 'Move the mouse over an element without clicking, e.g. to reveal a tooltip or menu.',
+  clear: 'Empty an input field of whatever it contains.',
+  upload: 'Attach a file to a file input; the step names the file, e.g. "I upload \"photo.png\"".',
+  scroll: 'Scroll a named element into view (page-level scrolling is not supported).',
+  wait: 'Pause until something appears, until the page settles, or for a number of seconds, e.g. "I wait for \"Done\" to appear", "I wait 3 seconds", "I wait for the page to load".',
   assert: 'Check that something is true of the page without interacting with it. Typical of Then steps: "I should see…", "the field contains…", "the URL is…".',
   none: 'The step describes nothing a test runner could do or check in a web browser.',
 } as const;
+
+// A bare number of seconds named outright in the step text, e.g. "I wait 3 seconds" — never inside
+// quotes, and never a number that is really part of a URL, path, or host, e.g. "/page/2" or
+// "localhost:3000" (a digit run flanked by a word char, slash, colon, dot, or hyphen doesn't count).
+const BARE_NUMBER = /(?<![\w/:.-])(\d+(?:\.\d+)?)(?![\w/:.-])/;
+
+function bareWaitSeconds(stepText: string): number | undefined {
+  const unquoted = stepText.replace(QUOTED, (match) => ' '.repeat(match.length));
+  const match = BARE_NUMBER.exec(unquoted);
+  return match ? Number(match[1]) : undefined;
+}
 
 const ASSERTION = {
   text_visible: {
@@ -270,10 +288,59 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
       if (!element) return undefinedStep(NO_ELEMENT);
       const value = pickValue('input_text');
       if (value === undefined) return undefinedStep(NO_VALUE);
-      resolved =
-        kind === 'fill' && pick('after_typing') === 'submit'
-          ? { kind, locator: element.locator, value, submit: true }
-          : { kind, locator: element.locator, value };
+      // A step that reads as "fill" but names a dropdown is really a select: choosing an option
+      // is not typing, so it never implies submitting either.
+      if (kind === 'fill' && element.role === 'combobox') {
+        resolved = { kind: 'select', locator: element.locator, value };
+      } else {
+        resolved =
+          kind === 'fill' && pick('after_typing') === 'submit'
+            ? { kind, locator: element.locator, value, submit: true }
+            : { kind, locator: element.locator, value };
+      }
+      break;
+    }
+    case 'hover':
+    case 'clear':
+    case 'scroll': {
+      const element = pickElement();
+      if (!element) return undefinedStep(NO_ELEMENT);
+      resolved = { kind, locator: element.locator };
+      break;
+    }
+    case 'upload': {
+      const element = pickElement();
+      if (!element) return undefinedStep(NO_ELEMENT);
+      const before = consumed.length;
+      const value = pickValue('input_text');
+      if (value === undefined) return undefinedStep(NO_VALUE);
+      // A file to upload must be named outright: page text (a "p…" id) is never a real file path.
+      if (consumed[before]?.pageSourced) {
+        return undefinedStep('Name the file to upload in quotes, e.g. I upload "photo.png".');
+      }
+      resolved = { kind, locator: element.locator, value };
+      break;
+    }
+    case 'wait': {
+      const seconds = bareWaitSeconds(step.text);
+      // "I wait 1 second": the only literal is the number itself, so there is no text to ask about.
+      const onlyTheNumber = seconds !== undefined && values.every((value) => /^\d+(?:\.\d+)?$/.test(value));
+      const before = consumed.length;
+      const text = values.length > 0 && !onlyTheNumber ? pickValue('expected_text') : undefined;
+      if (text !== undefined) {
+        resolved = { kind, text };
+        break;
+      }
+      // A `none` answer we then don't act on must not count against the step's confidence.
+      if (seconds !== undefined) consumed.length = before;
+      if (seconds !== undefined) {
+        resolved = { kind, seconds: Math.min(seconds, MAX_WAIT_SECONDS) };
+        break;
+      }
+      if (values.length > 0) {
+        return undefinedStep('A wait needs text to wait for in quotes, or a number of seconds, e.g. I wait for "Done" to appear / I wait 3 seconds.');
+      }
+      resolved = { kind };
       break;
     }
     case 'press': {

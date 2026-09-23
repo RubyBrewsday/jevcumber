@@ -210,7 +210,12 @@ skipped. Scenarios run sequentially.
 ```
 jevcumber <paths…> [--base-url <url>]
           [--frozen | --update] [--headed] [--min-confidence <n>] [--tags <expr>]
+          [--report-dir <dir>] [--no-report] [--trace]
 ```
+`--report-dir` (default `jevcumber-report`) is where failure evidence (screenshot + snapshot) and,
+when `--trace` is set, per-scenario traces are written — `--report-dir` applies to traces even under
+`--no-report`. `--no-report` turns off evidence capture. `--trace` records a Playwright trace per
+scenario, kept only for scenarios that did not pass. See v0.2 Milestone B (`2026-09-22-v0.2-milestones-design.md`).
 Console reporter: one line per step with status, a failure block with the
 error or ambiguity detail, and a summary. Exit 1 if any step is failed,
 ambiguous, or undefined. `TYPESAFE_API_KEY` is required only when a step
@@ -252,5 +257,6 @@ version 2 and records confidence.
 
 ## Out of scope (v1)
 
-Parallel scenarios, hooks, non-web drivers, HTML/JSON reports, iframes, file
-uploads, drag and drop, multi-tab flows.
+Parallel scenarios, hooks, non-web drivers, HTML/JSON reports, iframes, drag
+and drop, multi-tab flows. (File uploads shipped in v0.2 Milestone B — see
+`2026-09-22-v0.2-milestones-design.md`.)

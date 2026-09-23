@@ -44,6 +44,13 @@ export async function main(argv: string[]): Promise<number> {
     .option('--headed', 'show the browser', false)
     .option('--min-confidence <n>', 'refuse to act below this Jev confidence', parseConfidence, 0.6)
     .option('--tags <expr>', 'cucumber tag expression, e.g. "@smoke and not @wip"')
+    .option('--report-dir <dir>', 'where screenshots and snapshots of failing steps are written', 'jevcumber-report')
+    .option('--no-report', 'do not write failure evidence')
+    .option(
+      '--trace',
+      'record a Playwright trace per scenario; kept under --report-dir for scenarios that did not pass (even with --no-report)',
+      false,
+    )
     .addHelpText('after', '\nFirst time? Run `jevcumber install-browser` to download the Chromium build jevcumber drives.')
     .exitOverride();
 
@@ -70,6 +77,9 @@ export async function main(argv: string[]): Promise<number> {
       minConfidence: options.minConfidence,
       tags: options.tags,
       reporter: consoleReporter(),
+      reportDir: options.reportDir,
+      report: options.report !== false,
+      trace: options.trace,
     });
     if (results.length === 0) {
       console.error('error: no scenarios found');

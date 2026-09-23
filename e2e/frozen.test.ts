@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { cpSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { startFixtureServer } from '../fixtures/app/server.js';
@@ -82,9 +82,69 @@ describe('jevcumber --frozen against the fixture app', () => {
     expect(await main([dir, '--frozen'])).toBe(0);
   });
 
+  it('resolves an upload step\'s file against the feature file\'s directory, not the cwd', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'jevcumber-e2e-'));
+    const feature = join(dir, 'avatar.feature');
+    copyFileSync('fixtures/eval/avatar.png', join(dir, 'avatar.png'));
+    writeFileSync(
+      feature,
+      [
+        'Feature: Avatar upload',
+        '  Scenario: upload avatar',
+        '    Given I am on "/login"',
+        '    When I fill in the email field with "alice@example.com"',
+        '    And I fill in the password field with "secret"',
+        '    And I click the Log in button',
+        '    And I upload "avatar.png" as the avatar',
+        '    Then I should see "Welcome, alice"',
+        '',
+      ].join('\n'),
+    );
+    const [scenario] = parseFeature(readFileSync(feature, 'utf8'), feature);
+    const email: ResolvedStep = { kind: 'fill', locator: { by: 'role', role: 'textbox', name: 'Email' }, value: 'alice@example.com' };
+    const password: ResolvedStep = { kind: 'fill', locator: { by: 'label', value: 'Password' }, value: 'secret' };
+    const logIn: ResolvedStep = { kind: 'click', locator: { by: 'role', role: 'button', name: 'Log in' } };
+    const upload: ResolvedStep = { kind: 'upload', locator: { by: 'label', value: 'Avatar' }, value: 'avatar.png' };
+    const resolved: ResolvedStep[] = [{ kind: 'navigate', value: '/login' }, email, password, logIn, upload, sees('Welcome, alice')];
+    const entries = Object.fromEntries(
+      scenario.steps.map((step, index) => [stepKey(scenario, index), { text: step.text, resolved: resolved[index] }]),
+    );
+    writeFileSync(lockPathFor(feature), JSON.stringify({ version: 1, steps: entries }, null, 2));
+
+    expect(await main([dir, '--base-url', server.url, '--frozen'])).toBe(0);
+  });
+
   it('install-browser drives the bundled Playwright installer', async () => {
     // --dry-run makes Playwright print what it would install without downloading anything.
     expect(await main(['install-browser', '--dry-run'])).toBe(0);
+  });
+
+  it('writes a screenshot and snapshot for a failed step', async () => {
+    const { dir } = workspace({ 'I should see "Welcome, alice"': sees('Welcome, bob') });
+    const reportDir = join(dir, 'report');
+    expect(await main([dir, '--base-url', server.url, '--frozen', '--report-dir', reportDir])).toBe(1);
+    const stepDir = join(reportDir, 'login', 'successful-login', '5-failed');
+    expect(existsSync(join(stepDir, 'screenshot.png'))).toBe(true);
+    // Under --frozen every step replays from the lockfile, so `resolve()` (where the last Jev
+    // snapshot is normally captured) is never called; onStep falls back to taking a fresh
+    // snapshot of the page as it stands when the step failed.
+    const snapshotJson = JSON.parse(readFileSync(join(stepDir, 'snapshot.json'), 'utf8'));
+    expect(snapshotJson).toMatchObject({ url: expect.any(String), elements: expect.any(Array) });
+  });
+
+  it('--no-report writes nothing', async () => {
+    const { dir } = workspace({ 'I should see "Welcome, alice"': sees('Welcome, bob') });
+    const reportDir = join(dir, 'report');
+    expect(await main([dir, '--base-url', server.url, '--frozen', '--report-dir', reportDir, '--no-report'])).toBe(1);
+    expect(existsSync(reportDir)).toBe(false);
+  });
+
+  it('--trace keeps a trace for a failed scenario only', async () => {
+    const { dir } = workspace({ 'I should see "Welcome, alice"': sees('Welcome, bob') });
+    const reportDir = join(dir, 'report');
+    expect(await main([dir, '--base-url', server.url, '--frozen', '--report-dir', reportDir, '--trace'])).toBe(1);
+    expect(existsSync(join(reportDir, 'login', 'successful-login', 'trace.zip'))).toBe(true);
+    expect(existsSync(join(reportDir, 'login', 'adding-a-todo-after-logging-in', 'trace.zip'))).toBe(false);
   });
 
   it('rejects a non-absolute --base-url at parse time, before touching the browser', async () => {
