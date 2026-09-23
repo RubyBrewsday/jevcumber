@@ -113,11 +113,17 @@ function collect(): { title: string; text: string; elements: RawElement[]; headi
   const textCounts = new Map<string, number>();
   const roleCounts = new Map<string, number>();
   for (const p of parsed) {
+    // testid/label/placeholder/text locators (getByTestId/getByLabel/getByPlaceholder/getByText)
+    // match hidden elements too, so they're tallied over every SELECTOR match regardless of
+    // visibility. getByRole, in contrast, ignores hidden elements entirely (though it does still
+    // match disabled ones) — so a hidden duplicate must never count against a visible control's
+    // role+name uniqueness, or that visible control would wrongly be treated as ambiguous and
+    // dropped from the snapshot even though Playwright's own getByRole would resolve it uniquely.
     bump(testidCounts, p.testId);
     bump(labelCounts, p.label || undefined);
     bump(placeholderCounts, p.placeholder || undefined);
     bump(textCounts, p.text || undefined);
-    if (p.name) bump(roleCounts, `${p.role}:${p.name}`);
+    if (p.name && visible(p.el)) bump(roleCounts, `${p.role}:${p.name}`);
   }
 
   const elements: RawElement[] = [];
