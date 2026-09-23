@@ -297,7 +297,7 @@ footer a { text-underline-offset: 3px; }
 <pre><span class="dim">$</span> jevcumber features/ --frozen  <span class="dim"># in CI</span>
 <span class="ok">✓</span> Given I am on https://en.wikipedia.org
 <span class="ok">✓</span> When I search for "bagel"
-<span class="ok">✓</span> Then the URL should contain "/wiki/Bagel"</pre>
+<span class="ok">✓</span> Then I see an article about bagels</pre>
       </div>
     </div>
   </section>
@@ -330,7 +330,7 @@ footer a { text-underline-offset: 3px; }
         <span class="yes">Given I am on https://example.com/login</span><span class="no">Given I am on the login page</span></div>
       <div class="rule"><h3>Name controls the way the page does</h3><p>The words on the button are the best locator there is.</p>
         <span class="yes">And I click the Log in button</span><span class="yes">And I click "Log in"</span></div>
-      <div class="rule"><h3>Two kinds of Then</h3><p>Quoted text becomes a fast, cached Playwright assertion. A described expectation is judged by Jev against the live page on every run.</p>
+      <div class="rule"><h3>Two kinds of Then</h3><p>Quoted text becomes a fast, cached Playwright assertion. A described expectation is judged by Jev once, then pinned to the heading or title that showed it — and replays without the API.</p>
         <span class="yes">Then I should see "Welcome, alice"</span><span class="yes">Then I see an article about bagels</span></div>
     </div>
   </section>

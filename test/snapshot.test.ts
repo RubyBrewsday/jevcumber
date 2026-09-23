@@ -147,4 +147,46 @@ describe('snapshot', () => {
   it('falls back to the whole body when there is no main content landmark', async () => {
     expect((await snapshot(page, { elements: false })).text).toContain('Sign in');
   });
+
+  it('collects evidence: title, headings, link and button names, deduplicated and trimmed, each carrying its kind', async () => {
+    const p = await browser.newPage();
+    await p.setContent(`<title>Bagel - Wikipedia</title><h1>Bagel</h1><h2>History</h2><h4>ignored</h4>
+      <a href="/a">Bagel</a> <a href="/b">${'x'.repeat(100)}</a> <button>Search</button>`);
+    const { evidence } = await snapshot(p, { elements: false });
+    expect(evidence).toEqual([
+      { text: 'Bagel - Wikipedia', kind: 'title' },
+      { text: 'Bagel', kind: 'heading' }, // dedupe: the heading "Bagel" wins over the later link "Bagel"
+      { text: 'History', kind: 'heading' },
+      { text: 'x'.repeat(80), kind: 'link' },
+      { text: 'Search', kind: 'button' },
+    ]);
+    await p.close();
+  });
+
+  it('drops a heading longer than 80 characters rather than truncating it', async () => {
+    const p = await browser.newPage();
+    await p.setContent(`<title>T</title><h1>${'x'.repeat(81)}</h1><h2>Short</h2>`);
+    const { evidence } = await snapshot(p, { elements: false });
+    expect(evidence).toEqual([{ text: 'T', kind: 'title' }, { text: 'Short', kind: 'heading' }]);
+    await p.close();
+  });
+
+  it('only collects visible headings', async () => {
+    const p = await browser.newPage();
+    await p.setContent(`<title>T</title><h1 style="display:none">Hidden</h1><h2>Shown</h2>`);
+    const { evidence } = await snapshot(p, { elements: false });
+    expect(evidence.map((e) => e.text)).not.toContain('Hidden');
+    expect(evidence.map((e) => e.text)).toContain('Shown');
+    await p.close();
+  });
+
+  it('caps evidence at 40 items ranked by relevance to the step', async () => {
+    const p = await browser.newPage();
+    const links = Array.from({ length: 100 }, (_, i) => `<a href="/${i}">Topic ${i}</a>`).join('');
+    await p.setContent(`<title>T</title><h1>Michelle Obama</h1>${links}`);
+    const { evidence } = await snapshot(p, { relevantTo: 'Then I see an article about Michelle Obama' });
+    expect(evidence.length).toBeLessThanOrEqual(40);
+    expect(evidence.map((e) => e.text)).toContain('Michelle Obama');
+    await p.close();
+  });
 });

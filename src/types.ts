@@ -33,15 +33,22 @@ export interface ElementInfo {
   locator: LocatorSpec;
 }
 
+export interface EvidenceItem {
+  text: string;
+  kind: 'title' | 'heading' | 'link' | 'button';
+}
+
 export interface Snapshot {
   url: string;
   title: string;
   elements: ElementInfo[];
   text: string;
+  evidence: EvidenceItem[];
 }
 
 export type Assertion =
-  | { form: 'text_visible' | 'text_not_visible' | 'url_contains'; value: string }
+  | { form: 'text_visible' | 'text_not_visible' | 'url_contains' | 'title_contains'; value: string; pinned?: true }
+  | { form: 'heading_visible'; value: string; pinned?: true }
   | { form: 'element_visible'; locator: LocatorSpec }
   | { form: 'element_has_value'; locator: LocatorSpec; value: string }
   | { form: 'semantic' };
@@ -64,6 +71,13 @@ export interface StepResult {
   step: Step;
   status: StepStatus;
   detail?: string;
+  note?: string;
+}
+
+export interface ExecuteResult {
+  pinned?: Assertion;
+  /** How sure Jev was of the pinned evidence; stored in the lockfile alongside it. */
+  confidence?: number;
 }
 
 export interface ScenarioResult {

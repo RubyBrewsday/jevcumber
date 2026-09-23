@@ -1,8 +1,12 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import { toLocator } from './locators.js';
-import type { Assertion, LocatorSpec, ResolvedStep } from './types.js';
+import type { Judgment } from './resolver.js';
+import type { Assertion, ExecuteResult, LocatorSpec, ResolvedStep } from './types.js';
 
 export const SEMANTIC_THRESHOLD = 0.8;
+// A majority is enough: pins are already restricted to the title and headings, and a title and an h1
+// that say the same thing legitimately split the probability between them.
+export const PIN_MIN_CONFIDENCE = 0.5;
 const ASSERT_TIMEOUT = 5000;
 // Try selecting by visible label first (what a step's literal usually names); fall back to the
 // option's value for cases like <option value="fr">Republique</option>. The label attempt gets a
@@ -13,8 +17,8 @@ export interface ExecuteContext {
   /** What relative navigation resolves against. Optional: steps may name full URLs instead. */
   baseUrl?: string;
   stepText: string;
-  /** Returns P(page satisfies stepText). Absent in --frozen mode. */
-  semantic?: (stepText: string) => Promise<number>;
+  /** Judges whether the page satisfies stepText. Absent in --frozen mode. */
+  judge?: (stepText: string) => Promise<Judgment>;
 }
 
 /** Locators the runner should validate before replaying a cached step. Assertions are left to expect's auto-wait. */
@@ -57,28 +61,53 @@ async function select(locator: Locator, value: string): Promise<void> {
   }
 }
 
-async function check(page: Page, assertion: Assertion, ctx: ExecuteContext): Promise<void> {
+async function check(page: Page, assertion: Assertion, ctx: ExecuteContext): Promise<ExecuteResult> {
   const timeout = ASSERT_TIMEOUT;
   switch (assertion.form) {
     case 'text_visible':
-      return expect(page.getByText(assertion.value).first()).toBeVisible({ timeout });
+      await expect(page.getByText(assertion.value, { exact: assertion.pinned }).first()).toBeVisible({ timeout });
+      return {};
     case 'text_not_visible':
-      return expect(page.getByText(assertion.value).first()).toBeHidden({ timeout });
+      await expect(page.getByText(assertion.value).first()).toBeHidden({ timeout });
+      return {};
+    case 'title_contains':
+      await expect(page).toHaveTitle(new RegExp(escapeRegExp(assertion.value)), { timeout });
+      return {};
+    case 'heading_visible':
+      await expect(page.getByRole('heading', { name: assertion.value, exact: true }).first()).toBeVisible({ timeout });
+      return {};
     case 'url_contains':
-      return expect(page).toHaveURL(new RegExp(escapeRegExp(assertion.value)), { timeout });
+      await expect(page).toHaveURL(new RegExp(escapeRegExp(assertion.value)), { timeout });
+      return {};
     case 'element_visible':
-      return expect(toLocator(page, assertion.locator)).toBeVisible({ timeout });
+      await expect(toLocator(page, assertion.locator)).toBeVisible({ timeout });
+      return {};
     case 'element_has_value':
-      return expect(toLocator(page, assertion.locator)).toHaveValue(assertion.value, { timeout });
+      await expect(toLocator(page, assertion.locator)).toHaveValue(assertion.value, { timeout });
+      return {};
     case 'semantic': {
-      if (!ctx.semantic) {
+      if (!ctx.judge) {
         throw new Error('This step is a descriptive expectation that only Jev can judge, so it cannot run with --frozen.');
       }
-      const probability = await ctx.semantic(ctx.stepText);
-      if (probability < SEMANTIC_THRESHOLD) {
-        throw new Error(`Jev judged the expectation unmet (p=${probability.toFixed(2)}, needs ≥ ${SEMANTIC_THRESHOLD}).`);
+      const judgment = await ctx.judge(ctx.stepText);
+      if (judgment.holds < SEMANTIC_THRESHOLD) {
+        throw new Error(`Jev judged the expectation unmet (p=${judgment.holds.toFixed(2)}, needs ≥ ${SEMANTIC_THRESHOLD}).`);
       }
-      return;
+      // Pin to concrete evidence so later runs can replay this step without Jev — but only when
+      // it's the page title or a heading (a link or button name is not something a Then step is
+      // really "about"), and only if that evidence is really there, or the pinned check would
+      // fail on the very next run.
+      if (judgment.evidence && (judgment.evidenceConfidence ?? 0) >= PIN_MIN_CONFIDENCE) {
+        if (judgment.evidenceKind === 'title') {
+          if ((await page.title()).includes(judgment.evidence)) {
+            return { pinned: { form: 'title_contains', value: judgment.evidence, pinned: true }, confidence: judgment.evidenceConfidence };
+          }
+        } else if (judgment.evidenceKind === 'heading') {
+          const visible = await page.getByRole('heading', { name: judgment.evidence, exact: true }).first().isVisible().catch(() => false);
+          if (visible) return { pinned: { form: 'heading_visible', value: judgment.evidence, pinned: true }, confidence: judgment.evidenceConfidence };
+        }
+      }
+      return {};
     }
     default: {
       const unreachable: never = assertion;
@@ -87,7 +116,7 @@ async function check(page: Page, assertion: Assertion, ctx: ExecuteContext): Pro
   }
 }
 
-export async function execute(page: Page, resolved: ResolvedStep, ctx: ExecuteContext): Promise<void> {
+export async function execute(page: Page, resolved: ResolvedStep, ctx: ExecuteContext): Promise<ExecuteResult> {
   switch (resolved.kind) {
     case 'navigate':
       await page.goto(navigationUrl(resolved.value, ctx.baseUrl));
@@ -122,4 +151,5 @@ export async function execute(page: Page, resolved: ResolvedStep, ctx: ExecuteCo
     }
   }
   await settle(page);
+  return {};
 }

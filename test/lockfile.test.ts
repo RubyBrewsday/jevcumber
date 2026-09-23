@@ -56,8 +56,28 @@ describe('Lockfile', () => {
     const raw = readFileSync(path, 'utf8');
     expect(raw.endsWith('}\n')).toBe(true);
     expect(Object.keys(JSON.parse(raw).steps)).toEqual(['a', 'b']);
-    expect(JSON.parse(raw).version).toBe(1);
+    expect(JSON.parse(raw).version).toBe(2);
     expect(Lockfile.load(path).get('a')).toEqual({ kind: 'navigate', value: '/a' });
+  });
+
+  it('writes version 2 and keeps confidence', () => {
+    const path = tmp();
+    const lock = Lockfile.load(path);
+    lock.set('a', 'first', { kind: 'navigate', value: '/a' }, 0.93);
+    lock.save(false);
+    const data = JSON.parse(readFileSync(path, 'utf8'));
+    expect(data.version).toBe(2);
+    expect(data.steps.a.confidence).toBe(0.93);
+    expect(Lockfile.load(path).getEntry('a')).toEqual({ resolved: { kind: 'navigate', value: '/a' }, confidence: 0.93 });
+  });
+
+  it('loads a version 1 lockfile and rewrites it as version 2', () => {
+    const path = tmp();
+    writeFileSync(path, JSON.stringify({ version: 1, steps: { a: { text: 't', resolved: { kind: 'navigate', value: '/a' } } } }));
+    const lock = Lockfile.load(path);
+    expect(lock.get('a')).toEqual({ kind: 'navigate', value: '/a' });
+    lock.save(false);
+    expect(JSON.parse(readFileSync(path, 'utf8')).version).toBe(2);
   });
 
   it('prunes entries that were neither read, set, nor touched', () => {

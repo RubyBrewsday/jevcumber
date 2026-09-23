@@ -1,7 +1,7 @@
 import type { Page } from '@playwright/test';
 import { toLocator } from './locators.js';
 import { mostRelevant } from './relevance.js';
-import type { ElementInfo, LocatorSpec, Snapshot } from './types.js';
+import type { ElementInfo, EvidenceItem, LocatorSpec, Snapshot } from './types.js';
 
 const MAX_TEXT = 8000;
 // Verifying a locator costs browser round-trips, and a page can have thousands of links (a long
@@ -28,7 +28,7 @@ interface RawElement {
 }
 
 // Runs inside the page: must be self-contained (no references to module scope).
-function collect(): { title: string; text: string; elements: RawElement[] } {
+function collect(): { title: string; text: string; elements: RawElement[]; headings: string[] } {
   const SELECTOR = [
     'a[href]', 'button', 'input:not([type=hidden])', 'select', 'textarea',
     '[role=button]', '[role=link]', '[role=checkbox]', '[role=radio]', '[role=tab]',
@@ -118,7 +118,11 @@ function collect(): { title: string; text: string; elements: RawElement[] } {
   // Site chrome (menus, sidebars, tables of contents) can fill the whole text budget before the
   // content starts, so read the main landmark when the page has one.
   const content = document.querySelector<HTMLElement>('main, [role=main], article') ?? document.body;
-  return { title: document.title, text: clean(content?.innerText), elements };
+  const headings = Array.from(document.querySelectorAll('h1, h2, h3'))
+    .filter((h) => visible(h))
+    .map((h) => clean((h as HTMLElement).innerText))
+    .filter(Boolean);
+  return { title: document.title, text: clean(content?.innerText), elements, headings };
 }
 
 // `repeated` holds role+name and text keys that occur more than once on the page: those locators
@@ -135,6 +139,37 @@ function specsFor(raw: RawElement, repeated: Set<string>): LocatorSpec[] {
   if (raw.placeholder) specs.push({ by: 'placeholder', value: raw.placeholder });
   if (raw.text && !repeated.has(textKey(raw))) specs.push({ by: 'text', value: raw.text });
   return specs;
+}
+
+const MAX_EVIDENCE = 40;
+const MAX_EVIDENCE_LENGTH = 80;
+
+// Things a described expectation could be pinned to: what the page says it is about. Only the
+// title and headings are ever pinned to (see executor.ts); links and buttons are still sent as
+// evidence because they can settle which item best shows the expectation, or serve as a
+// page-sourced input_text candidate, without being pin-worthy themselves.
+function evidenceOf(raw: { title: string; headings: string[]; elements: RawElement[] }, relevantTo: string): EvidenceItem[] {
+  const items: EvidenceItem[] = [];
+  const title = raw.title.trim().slice(0, MAX_EVIDENCE_LENGTH);
+  if (title) items.push({ text: title, kind: 'title' });
+  for (const heading of raw.headings) {
+    const text = heading.trim();
+    // Dropped rather than truncated: a truncated heading would not `getByRole('heading', {
+    // name, exact: true })` back to itself, so a pin on it could never replay.
+    if (!text || text.length > MAX_EVIDENCE_LENGTH) continue;
+    items.push({ text, kind: 'heading' });
+  }
+  for (const element of raw.elements) {
+    if (element.role !== 'link' && element.role !== 'button') continue;
+    const text = element.name.trim().slice(0, MAX_EVIDENCE_LENGTH);
+    if (!text) continue;
+    items.push({ text, kind: element.role });
+  }
+  // Dedupe by text; the first occurrence (title, then headings, then links/buttons) wins the kind.
+  const byText = new Map<string, EvidenceItem>();
+  for (const item of items) if (!byText.has(item.text)) byText.set(item.text, item);
+  // Title and headings win ties, so a described expectation prefers pin-worthy evidence.
+  return mostRelevant([...byText.values()], relevantTo, (item) => item.text, MAX_EVIDENCE, (item) => item.kind === 'title' || item.kind === 'heading');
 }
 
 const roleKey = (raw: RawElement) => `role:${raw.role}:${raw.name}`;
@@ -171,7 +206,8 @@ export async function snapshot(page: Page, options: SnapshotOptions = {}): Promi
 async function snapshotOnce(page: Page, options: SnapshotOptions): Promise<Snapshot> {
   const raw = await page.evaluate(collect);
   const text = raw.text.slice(0, MAX_TEXT);
-  if (options.elements === false) return { url: page.url(), title: raw.title, elements: [], text };
+  const evidence = evidenceOf(raw, options.relevantTo ?? '');
+  if (options.elements === false) return { url: page.url(), title: raw.title, elements: [], text, evidence };
 
   const repeated = repeatedKeys(raw.elements);
   // On a page of links, controls (fields, buttons) are the likelier targets: they win ties.
@@ -205,5 +241,5 @@ async function snapshotOnce(page: Page, options: SnapshotOptions): Promise<Snaps
     elements.push(info);
   }
 
-  return { url: page.url(), title: raw.title, elements, text };
+  return { url: page.url(), title: raw.title, elements, text, evidence };
 }

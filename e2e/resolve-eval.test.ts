@@ -6,7 +6,7 @@ import { RESOLVED } from '../fixtures/expected.js';
 import { extractValues } from '../src/candidates.js';
 import { execute } from '../src/executor.js';
 import { parseFeature } from '../src/gherkin.js';
-import { createClient, resolve, semanticCheck, type JevClient } from '../src/resolver.js';
+import { createClient, judge, resolve, type JevClient } from '../src/resolver.js';
 import { snapshot } from '../src/snapshot.js';
 
 const FEATURES = ['fixtures/features/login.feature', 'fixtures/eval/live-only.feature'];
@@ -74,7 +74,12 @@ describe.skipIf(!process.env.TYPESAFE_API_KEY)('Jev resolves the fixture steps t
         await execute(page, expected, {
           baseUrl: server.url,
           stepText: step.text,
-          semantic: async (text) => semanticCheck(real, text, await snapshot(page, { elements: false })),
+          judge: async (text) => {
+            const verdict = await judge(real, text, await snapshot(page, { elements: false, relevantTo: text }));
+            lines.push(`       judge            holds ${verdict.holds.toFixed(2)}  evidence=${JSON.stringify(verdict.evidence ?? null)} (${(verdict.evidenceConfidence ?? 0).toFixed(2)})`);
+            if (scenario.name.includes('pinned') && !(verdict.evidence && (verdict.evidenceConfidence ?? 0) >= 0.5)) wrong++;
+            return verdict;
+          },
         });
       }
       await context.close();

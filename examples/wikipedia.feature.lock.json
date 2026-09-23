@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "steps": {
     "63bd7e885f16cf0ca36c2cc1382c2703b45ccbf6810738203f5807967cf29abd": {
       "text": "I search for \"bagel\"",
@@ -12,7 +12,8 @@
         },
         "value": "bagel",
         "submit": true
-      }
+      },
+      "confidence": 0.93
     },
     "8558dfd43b045eb0d8d02c3b634da9347fe29cd9febf4bdff87a7c47e780743c": {
       "text": "the URL should contain \"/wiki/Bagel\"",
@@ -22,24 +23,28 @@
           "form": "url_contains",
           "value": "/wiki/Bagel"
         }
-      }
+      },
+      "confidence": 0.98
     },
-    "cf5bd18e8f33497b2a681fcbb4f7a35d7010ee721b5104c1eaf9e3074b6d512f": {
-      "text": "I should see \"From Wikipedia, the free encyclopedia\"",
+    "f0e0ebac7e43a0f64303f4eb148ee6d452bf31edf7e1be8565853191317e6353": {
+      "text": "I see an article about bagels",
       "resolved": {
         "kind": "assert",
         "assertion": {
-          "form": "text_visible",
-          "value": "From Wikipedia, the free encyclopedia"
+          "form": "title_contains",
+          "value": "Bagel - Wikipedia",
+          "pinned": true
         }
-      }
+      },
+      "confidence": 0.89
     },
     "feb0e5c1e21e511f322d6cdf6cca873d84edeaecb82c4023ba9f72bac8925695": {
       "text": "I am on https://en.wikipedia.org",
       "resolved": {
         "kind": "navigate",
         "value": "https://en.wikipedia.org"
-      }
+      },
+      "confidence": 0.94
     }
   }
 }

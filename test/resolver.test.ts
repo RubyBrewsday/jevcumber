@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolve, semanticCheck, shortlist, type JevClient } from '../src/resolver.js';
+import { judge, resolve, shortlist, type JevClient } from '../src/resolver.js';
 import type { ElementInfo, Snapshot, Step } from '../src/types.js';
 
 const el = (id: string, role: string, name: string): ElementInfo => ({
@@ -10,6 +10,7 @@ const SNAP: Snapshot = {
   title: 'Login',
   text: 'Sign in',
   elements: [el('e1', 'textbox', 'Email'), el('e2', 'button', 'Log in')],
+  evidence: [],
 };
 const answer = (choice: string, confidence = 0.95, probabilities: Record<string, number> = { [choice]: confidence }) => ({
   type: 'choice', choice, confidence, probabilities,
@@ -231,18 +232,91 @@ describe('shortlist', () => {
   });
 });
 
-describe('semanticCheck', () => {
-  it('asks one noul over the step and page text and returns its probability', async () => {
-    const { client, requests } = fakeClient({ holds: { type: 'noul', noul: 0.93 } });
-    expect(await semanticCheck(client, 'I see a friendly error', SNAP)).toBe(0.93);
-    expect(requests[0].state).toEqual({ expectation: 'I see a friendly error', page: { url: SNAP.url, title: SNAP.title, text: SNAP.text } });
+describe('judge', () => {
+  const snap: Snapshot = {
+    ...SNAP,
+    evidence: [
+      { text: 'Login - MyApp', kind: 'title' },
+      { text: 'Sign in', kind: 'heading' },
+      { text: 'Forgot password?', kind: 'link' },
+    ],
+  };
+
+  it('reports title evidence as a title', async () => {
+    const titled = { ...snap, title: 'Login - MyApp' };
+    const { client } = fakeClient({ holds: noul(0.9), evidence: answer('x1', 0.9) });
+    expect(await judge(client, 'x', titled)).toMatchObject({ evidence: 'Login - MyApp', evidenceKind: 'title' });
+  });
+  const noul = (p: number) => ({ type: 'noul', noul: p });
+
+  it('asks holds and evidence together over the step and page, and returns both, with kind taken from the evidence item', async () => {
+    const { client, requests } = fakeClient({ holds: noul(0.93), evidence: answer('x2', 0.9) });
+    expect(await judge(client, 'I see the login page', snap)).toEqual({ holds: 0.93, evidence: 'Sign in', evidenceKind: 'heading', evidenceConfidence: 0.9 });
+    expect(requests[0].state).toEqual({
+      expectation: 'I see the login page',
+      page: {
+        url: snap.url,
+        title: snap.title,
+        text: snap.text,
+        evidence: [
+          { id: 'x1', text: 'Login - MyApp', kind: 'title' },
+          { id: 'x2', text: 'Sign in', kind: 'heading' },
+          { id: 'x3', text: 'Forgot password?', kind: 'link' },
+        ],
+      },
+    });
     expect(requests[0].questions.holds.type).toBe('noul');
+    expect(Object.keys(requests[0].questions.evidence.criteria)).toEqual(['x1', 'x2', 'x3', 'none']);
+  });
+
+  it('returns no evidence when Jev picks none, and skips the question when the page has no evidence', async () => {
+    const { client } = fakeClient({ holds: noul(0.9), evidence: answer('none', 0.8) });
+    expect(await judge(client, 'x', snap)).toEqual({ holds: 0.9 });
+    const bare = fakeClient({ holds: noul(0.5) });
+    expect(await judge(bare.client, 'x', { ...snap, evidence: [] })).toEqual({ holds: 0.5 });
+    expect(bare.requests[0].questions.evidence).toBeUndefined();
   });
 
   it('throws on a malformed response instead of silently coercing a bad value to a number', async () => {
-    const { client } = fakeClient({ holds: { type: 'noul' } }); // no `noul` field
-    await expect(semanticCheck(client, 'I see a friendly error', SNAP)).rejects.toThrow(
-      /Unexpected response from Jev: no answer for "holds"/,
-    );
+    const { client } = fakeClient({ holds: { type: 'noul', noul: 'yes' } });
+    await expect(judge(client, 'x', snap)).rejects.toThrow(/no answer for "holds"/);
+  });
+});
+
+describe('resolve: page-sourced values', () => {
+  const snap: Snapshot = { ...SNAP, evidence: [{ text: 'Michelle Obama', kind: 'heading' }, { text: 'Barack Obama', kind: 'link' }] };
+  const fill = { kind: answer('fill'), element: answer('e1') };
+
+  it('offers page text as input_text candidates after the literals', async () => {
+    const { client, requests } = fakeClient({ ...fill, input_text: answer('p1', 0.9) });
+    await resolve(input(when('I search for his wife'), client, [], snap));
+    expect(Object.keys(requests[0].questions.input_text.criteria)).toEqual(['p1', 'p2', 'none']);
+    expect(requests[0].state.page_text).toEqual({ p1: 'Michelle Obama', p2: 'Barack Obama' });
+    const withLiteral = fakeClient({ ...fill, input_text: answer('v1') });
+    await resolve(input(when('I search for "x"'), withLiteral.client, ['x'], snap));
+    expect(Object.keys(withLiteral.requests[0].questions.input_text.criteria)).toEqual(['v1', 'p1', 'p2', 'none']);
+  });
+
+  it('fills with the chosen page text', async () => {
+    const outcome = await resolve(input(when('I search for his wife'), fakeClient({ ...fill, input_text: answer('p1', 0.9) }).client, [], snap));
+    expect(outcome).toMatchObject({ ok: true, resolved: { kind: 'fill', value: 'Michelle Obama' } });
+  });
+
+  it('holds page-sourced picks to a higher bar than literals', async () => {
+    const outcome = await resolve(input(when('I search for his wife'), fakeClient({ ...fill, input_text: answer('p1', 0.7) }).client, [], snap));
+    expect(outcome).toMatchObject({ ok: false, reason: 'ambiguous' });
+    expect((outcome as { detail: string }).detail).toContain('0.75');
+    const literal = await resolve(input(when('I search for "x"'), fakeClient({ ...fill, input_text: answer('v1', 0.7) }).client, ['x'], snap));
+    expect(literal).toMatchObject({ ok: true });
+  });
+
+  it('holds each answer to its own bar: a confident page-sourced pick does not raise the bar for an unrelated weak answer', async () => {
+    const { client } = fakeClient({
+      kind: answer('fill', 0.99),
+      element: answer('e1', 0.7),
+      input_text: answer('p1', 0.95),
+    });
+    const outcome = await resolve(input(when('I search for his wife'), client, [], snap));
+    expect(outcome).toMatchObject({ ok: true, confidence: 0.7 });
   });
 });

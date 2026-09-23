@@ -60,6 +60,13 @@ describe('jevcumber --frozen against the fixture app', () => {
     expect(await main([dir, '--frozen'])).toBe(1); // relative "/login" with no --base-url to resolve against
   });
 
+  it('replays a pinned expectation under --frozen as a plain text check', async () => {
+    const { dir } = workspace({
+      'I should see "Welcome, alice"': { kind: 'assert', assertion: { form: 'text_visible', value: 'Welcome, alice', pinned: true } },
+    });
+    expect(await main([dir, '--base-url', server.url, '--frozen'])).toBe(0);
+  });
+
   it('needs no --base-url when steps name full URLs', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'jevcumber-e2e-'));
     const feature = join(dir, 'absolute.feature');

@@ -4,9 +4,9 @@ import { actionLocators, execute } from './executor.js';
 import { loadFeatures } from './gherkin.js';
 import { toLocator } from './locators.js';
 import { Lockfile, lockPathFor, stepKey } from './lockfile.js';
-import { createClient, resolve, semanticCheck, type JevClient } from './resolver.js';
+import { createClient, judge, resolve, type JevClient } from './resolver.js';
 import { snapshot } from './snapshot.js';
-import type { Mode, ResolveOutcome, ResolvedStep, Scenario, ScenarioResult, Step, StepResult } from './types.js';
+import type { Assertion, ExecuteResult, Mode, ResolveOutcome, ResolvedStep, Scenario, ScenarioResult, Step, StepResult } from './types.js';
 
 const VALIDATE_TIMEOUT = 2000;
 
@@ -15,11 +15,12 @@ export interface ScenarioDeps {
   lock: Lockfile;
   resolve(step: Step, previousSteps: string[]): Promise<ResolveOutcome>;
   isValid(resolved: ResolvedStep): Promise<boolean>;
-  execute(resolved: ResolvedStep, step: Step): Promise<void>;
+  execute(resolved: ResolvedStep, step: Step): Promise<ExecuteResult | void>;
   onStep?(result: StepResult): void;
 }
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error));
+const pinNote = (assertion: Assertion) => `pinned to ${JSON.stringify('value' in assertion ? assertion.value : assertion)}`;
 
 export async function runScenario(scenario: Scenario, deps: ScenarioDeps): Promise<StepResult[]> {
   const results: StepResult[] = [];
@@ -63,16 +64,39 @@ export async function runScenario(scenario: Scenario, deps: ScenarioDeps): Promi
       }
       if (!outcome.ok) return { step, status: outcome.reason, detail: outcome.detail };
       resolved = outcome.resolved;
-      deps.lock.set(key, step.text, resolved);
+      deps.lock.set(key, step.text, resolved, outcome.confidence);
       healed = cached !== undefined;
     }
 
+    let note: string | undefined;
     try {
-      await deps.execute(resolved, step);
+      const result = await deps.execute(resolved, step);
+      if (result?.pinned) {
+        deps.lock.set(key, step.text, { kind: 'assert', assertion: result.pinned }, result.confidence);
+        note = pinNote(result.pinned);
+      }
     } catch (error) {
-      return { step, status: 'failed', detail: message(error) };
+      const wasPinned = resolved.kind === 'assert' && 'pinned' in resolved.assertion && resolved.assertion.pinned;
+      if (!wasPinned || deps.mode === 'frozen') return { step, status: 'failed', detail: message(error) };
+      // The evidence this step was pinned to has gone. Ask Jev whether the expectation still holds
+      // before failing: a heading rewrite should heal, a real regression should fail.
+      try {
+        const rejudged = await deps.execute({ kind: 'assert', assertion: { form: 'semantic' } }, step);
+        if (rejudged?.pinned) {
+          deps.lock.set(key, step.text, { kind: 'assert', assertion: rejudged.pinned }, rejudged.confidence);
+          note = pinNote(rejudged.pinned);
+        } else {
+          deps.lock.set(key, step.text, { kind: 'assert', assertion: { form: 'semantic' } });
+          note = 'no longer pinned: needs Jev under --frozen';
+        }
+        healed = true;
+      } catch (again) {
+        return { step, status: 'failed', detail: `pinned check failed (${message(error)}); re-judge: ${message(again)}` };
+      }
     }
-    return { step, status: healed ? 'healed' : 'passed' };
+    const result: StepResult = { step, status: healed ? 'healed' : 'passed' };
+    if (note) result.note = note;
+    return result;
   };
 
   for (const [index, step] of scenario.steps.entries()) {
@@ -151,7 +175,7 @@ export async function runAll(options: RunOptions): Promise<ScenarioResult[]> {
               execute(page, resolved, {
                 baseUrl: options.baseUrl,
                 stepText: step.text,
-                semantic: frozen ? undefined : async (text) => semanticCheck(getClient(), text, await snapshot(page, { elements: false })),
+                judge: frozen ? undefined : async (text) => judge(getClient(), text, await snapshot(page, { elements: false, relevantTo: text })),
               }),
             onStep: (result) => options.reporter.step(result),
           });

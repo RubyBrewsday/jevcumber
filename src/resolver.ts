@@ -4,6 +4,15 @@ import type { Assertion, ElementInfo, ResolveOutcome, ResolvedStep, Snapshot, St
 
 const MODEL = 'jev-latest';
 const MAX_ELEMENTS = 60;
+export const PAGE_SOURCED_MIN_CONFIDENCE = 0.75;
+
+export interface Judgment {
+  holds: number;
+  evidence?: string;
+  /** Where the evidence lives: only 'title' and 'heading' are ever pinned to (see executor.ts). */
+  evidenceKind?: 'title' | 'heading' | 'link' | 'button';
+  evidenceConfidence?: number;
+}
 
 export interface ChoiceAnswer {
   choice: string;
@@ -28,7 +37,7 @@ export interface ResolveInput {
 }
 
 const KIND = {
-  navigate: 'Open a URL or path directly in the browser, e.g. "I am on /login" or "I visit the home page at /".',
+  navigate: 'Open a URL or path directly in the browser, e.g. "I am on /login" or "I visit the home page at /". Only for a Given or When step: a Then step saying "I am on the todos page" is a check that the page is showing (assert).',
   click: 'Click or tap an element such as a button, link, tab, or menu item.',
   fill: 'Type or enter text into an input field, replacing its content.',
   select: 'Choose an option from a dropdown or select box.',
@@ -113,16 +122,15 @@ const VALUE_QUESTIONS: [ValueQuestionId, string, string][] = [
     'None of the literals is a URL or path.',
   ],
   [
-    'input_text',
-    'Assume the Gherkin step in `step.text` asks for text to be typed into a field, or an option to be chosen from a dropdown. Which literal in `values` is the text to type or the option to choose? A literal that only names the field is not it.',
-    'None of the literals is text to type or an option to choose; they only name the field.',
-  ],
-  [
     'expected_text',
     'Assume the Gherkin step in `step.text` checks the page. Which literal in `values` is the text, field value, or URL fragment the step expects to find, or expects to be absent? A literal that only names the element being checked is not it.',
     'None of the literals is an expected text, value, or URL fragment.',
   ],
 ];
+
+const INPUT_TEXT_INSTRUCTIONS =
+  'Assume the Gherkin step in `step.text` asks for text to be typed into a field, or an option to be chosen. Which entry is the text to type or the option to choose? Literals from the step are in `values`; `page_text` holds things the page says, for when the step describes the text (e.g. "his wife") rather than quoting it. A literal that only names the field is not it.';
+const INPUT_TEXT_NONE = 'Neither the literals nor the page text give what to type; the literals only name the field.';
 
 /** Cap a large page to the elements sharing the most words with the step, preserving page order. */
 export function shortlist(elements: ElementInfo[], stepText: string, max: number): ElementInfo[] {
@@ -133,6 +141,7 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
   const { step, snapshot, values, client, minConfidence } = input;
   const elements = shortlist(snapshot.elements, step.text, MAX_ELEMENTS);
   const valueById: Record<string, string> = Object.fromEntries(values.map((value, i) => [`v${i + 1}`, value]));
+  const pageTextById: Record<string, string> = Object.fromEntries(snapshot.evidence.map((e, i) => [`p${i + 1}`, e.text]));
 
   const state = {
     step: { keyword: step.keyword, text: step.text },
@@ -144,6 +153,7 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
       text: snapshot.text,
     },
     values: valueById,
+    ...(Object.keys(pageTextById).length > 0 ? { page_text: pageTextById } : {}),
   };
 
   const questions: Record<string, unknown> = {
@@ -163,7 +173,10 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
       Object.fromEntries(feasibleForms.map((form) => [form, ASSERTION[form]])),
     );
   }
-  if (elements.length > 0 && values.length > 0) {
+  // Whenever input_text is asked below (a literal or page text to type) and there is a field to
+  // type into, the step may also imply submitting — a page-sourced "search for …" needs this as
+  // much as a quoted one does.
+  if (elements.length > 0 && (values.length > 0 || snapshot.evidence.length > 0)) {
     questions.after_typing = choice(
       'Assume the Gherkin step in `step.text` asks for text to be typed into a field. Once the text is typed, does the step imply submitting it?',
       AFTER_TYPING,
@@ -171,20 +184,25 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
   }
   if (elements.length > 0) {
     questions.element = choice(
-      'Which element of `page.elements` is the Gherkin step in `step.text` acting on or checking? Match on the element\'s role and name as a user would describe it.',
+      'Which element of `page.elements` is the Gherkin step in `step.text` acting on or checking? The step may name the element as a user would (by its role and name), or describe it (e.g. "the link to his wife"): use `page.text` to work out which element that is.',
       {
         ...Object.fromEntries(elements.map((e) => [e.id, { role: e.role, name: e.name }])),
         none: 'None of the listed elements is what the step refers to, or the step does not refer to an element.',
       },
     );
   }
+  const literalOptions = Object.fromEntries(Object.entries(valueById).map(([id, value]) => [id, { literal: value }]));
   if (values.length > 0) {
     // One question per purpose: a generic "which literal is the data?" let `none` look plausible
     // for navigation, because a path can also be read as naming the step's target.
-    const options = Object.fromEntries(Object.entries(valueById).map(([id, value]) => [id, { literal: value }]));
     for (const [id, instructions, none] of VALUE_QUESTIONS) {
-      questions[id] = choice(instructions, { ...options, none });
+      questions[id] = choice(instructions, { ...literalOptions, none });
     }
+  }
+  if (values.length > 0 || (elements.length > 0 && snapshot.evidence.length > 0)) {
+    const pageTextOptions =
+      elements.length > 0 ? Object.fromEntries(Object.entries(pageTextById).map(([id, t]) => [id, { page_text: t }])) : {};
+    questions.input_text = choice(INPUT_TEXT_INSTRUCTIONS, { ...literalOptions, ...pageTextOptions, none: INPUT_TEXT_NONE });
   }
 
   const { answers } = await client.systemOne({ state, questions, model: MODEL });
@@ -195,7 +213,7 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
   }
 
   // Record every answer we actually rely on; confidence is the least certain of these.
-  const consumed: { id: string; answer: ChoiceAnswer }[] = [];
+  const consumed: { id: string; answer: ChoiceAnswer; pageSourced?: boolean }[] = [];
   const pick = (id: string): string | undefined => {
     const answer = answers[id] as ChoiceAnswer | undefined;
     if (!answer) return undefined;
@@ -208,7 +226,13 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
   };
   const pickValue = (question: ValueQuestionId) => {
     const id = pick(question);
-    return id === undefined ? undefined : valueById[id];
+    if (id === undefined) return undefined;
+    if (id in pageTextById) {
+      const entry = consumed.find((e) => e.id === question);
+      if (entry) entry.pageSourced = true;
+      return pageTextById[id];
+    }
+    return valueById[id];
   };
   const undefinedStep = (detail: string): ResolveOutcome => ({ ok: false, reason: 'undefined', detail });
   const NO_ELEMENT = 'No element on the page matches this step. Name the control as it appears on the page.';
@@ -284,12 +308,22 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
     }
   }
 
-  const weakest = consumed.reduce((low, entry) => (entry.answer.confidence < low.answer.confidence ? entry : low));
-  if (weakest.answer.confidence < minConfidence) {
+  // Each answer is held to its own bar: a page-sourced pick (a `p…` id) needs the higher
+  // page-sourced confidence; every other answer keeps the caller's minConfidence.
+  const withBar = consumed.map((entry) => ({
+    entry,
+    bar: entry.pageSourced ? Math.max(minConfidence, PAGE_SOURCED_MIN_CONFIDENCE) : minConfidence,
+  }));
+  const failing = withBar.filter(({ entry, bar }) => entry.answer.confidence < bar);
+  if (failing.length > 0) {
+    const { entry: weakest, bar } = failing.reduce((worst, cur) =>
+      cur.bar - cur.entry.answer.confidence > worst.bar - worst.entry.answer.confidence ? cur : worst,
+    );
     const describe = (label: string): string => {
       const element = elements.find((e) => e.id === label);
       if (weakest.id === 'element' && element) return `${element.role} "${element.name}"`;
       if (weakest.id !== 'element' && label in valueById) return JSON.stringify(valueById[label]);
+      if (weakest.id !== 'element' && label in pageTextById) return JSON.stringify(pageTextById[label]);
       return label;
     };
     const top = Object.entries(weakest.answer.probabilities)
@@ -300,32 +334,49 @@ export async function resolve(input: ResolveInput): Promise<ResolveOutcome> {
     return {
       ok: false,
       reason: 'ambiguous',
-      detail: `Jev was not confident about the ${weakest.id.replace('_', ' ')} (${weakest.answer.confidence.toFixed(2)} < ${minConfidence}). Candidates: ${top}. Reword the step to be more specific.`,
+      detail: `Jev was not confident about the ${weakest.id.replace('_', ' ')} (${weakest.answer.confidence.toFixed(2)} < ${bar}). Candidates: ${top}. Reword the step to be more specific.`,
     };
   }
 
-  return { ok: true, resolved, confidence: weakest.answer.confidence };
+  const confidence = Math.min(...consumed.map((entry) => entry.answer.confidence));
+  return { ok: true, resolved, confidence };
 }
 
-/** Probability that the page satisfies a descriptive expectation. */
-export async function semanticCheck(client: JevClient, stepText: string, snapshot: Snapshot): Promise<number> {
+/** Does the page satisfy a described expectation — and which page item shows it? */
+export async function judge(client: JevClient, stepText: string, snapshot: Snapshot): Promise<Judgment> {
+  const evidence = snapshot.evidence.map((e, i) => ({ id: `x${i + 1}`, text: e.text, kind: e.kind }));
+  const questions: Record<string, unknown> = {
+    // Spelling out both answers matters: measured on live pages, it moved true expectations from
+    // 0.67-0.88 to 0.95-0.98 while false ones stayed at or below 0.22.
+    holds: noul('Does the web page in `page` show what `expectation` describes?', {
+      true: "The page's title and content are what the expectation describes. A page mainly about the named subject counts, even if the expectation uses a short or informal name for it.",
+      false: 'The page is about something else, or is an error page, a login wall, a bot check, or empty.',
+    }),
+  };
+  if (evidence.length > 0) {
+    questions.evidence = choice(
+      'Assume the web page in `page` satisfies `expectation`. Which single item of `page.evidence` best shows that it does? Prefer the page title or a heading that names what the expectation is about; choose a link or button only when the expectation is about that control.',
+      {
+        ...Object.fromEntries(evidence.map((e) => [e.id, { text: e.text, kind: e.kind }])),
+        none: 'No single item shows it; the expectation is about the page as a whole, an ordering, a count, or something not captured by any listed item.',
+      },
+    );
+  }
   const { answers } = await client.systemOne({
-    state: { expectation: stepText, page: { url: snapshot.url, title: snapshot.title, text: snapshot.text } },
-    questions: {
-      // Spelling out both answers matters: measured on live pages, it moved true expectations from
-      // 0.67-0.88 to 0.95-0.98 while false ones stayed at or below 0.22.
-      holds: noul('Does the web page in `page` show what `expectation` describes?', {
-        true: "The page's title and content are what the expectation describes. A page mainly about the named subject counts, even if the expectation uses a short or informal name for it.",
-        false: 'The page is about something else, or is an error page, a login wall, a bot check, or empty.',
-      }),
-    },
+    state: { expectation: stepText, page: { url: snapshot.url, title: snapshot.title, text: snapshot.text, evidence } },
+    questions,
     model: MODEL,
   });
   const holds = answers.holds as { noul?: unknown } | undefined;
-  if (typeof holds?.noul !== 'number') {
-    throw new Error('Unexpected response from Jev: no answer for "holds".');
-  }
-  return holds.noul;
+  if (typeof holds?.noul !== 'number') throw new Error('Unexpected response from Jev: no answer for "holds".');
+  const picked = answers.evidence as ChoiceAnswer | undefined;
+  const item = picked && picked.choice !== 'none' ? evidence.find((e) => e.id === picked.choice) : undefined;
+  // Several items can legitimately show the same thing (a title and an h1 that agree), which spreads
+  // probability and lowers the distribution's confidence even though any of them is a sound pin.
+  // The chosen item's own probability is the better guard against pinning to something incidental.
+  return item
+    ? { holds: holds.noul, evidence: item.text, evidenceKind: item.kind, evidenceConfidence: picked!.probabilities[picked!.choice] }
+    : { holds: holds.noul };
 }
 
 export function createClient(): JevClient {
