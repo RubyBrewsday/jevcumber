@@ -10,6 +10,7 @@ const SNAP: Snapshot = {
   title: 'Login',
   text: 'Sign in',
   elements: [el('e1', 'textbox', 'Email'), el('e2', 'button', 'Log in')],
+  evidence: [],
 };
 const answer = (choice: string, confidence = 0.95, probabilities: Record<string, number> = { [choice]: confidence }) => ({
   type: 'choice', choice, confidence, probabilities,

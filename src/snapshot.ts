@@ -171,7 +171,7 @@ export async function snapshot(page: Page, options: SnapshotOptions = {}): Promi
 async function snapshotOnce(page: Page, options: SnapshotOptions): Promise<Snapshot> {
   const raw = await page.evaluate(collect);
   const text = raw.text.slice(0, MAX_TEXT);
-  if (options.elements === false) return { url: page.url(), title: raw.title, elements: [], text };
+  if (options.elements === false) return { url: page.url(), title: raw.title, elements: [], text, evidence: [] };
 
   const repeated = repeatedKeys(raw.elements);
   // On a page of links, controls (fields, buttons) are the likelier targets: they win ties.
@@ -205,5 +205,5 @@ async function snapshotOnce(page: Page, options: SnapshotOptions): Promise<Snaps
     elements.push(info);
   }
 
-  return { url: page.url(), title: raw.title, elements, text };
+  return { url: page.url(), title: raw.title, elements, text, evidence: [] };
 }

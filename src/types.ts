@@ -38,10 +38,11 @@ export interface Snapshot {
   title: string;
   elements: ElementInfo[];
   text: string;
+  evidence: string[];
 }
 
 export type Assertion =
-  | { form: 'text_visible' | 'text_not_visible' | 'url_contains'; value: string }
+  | { form: 'text_visible' | 'text_not_visible' | 'url_contains'; value: string; pinned?: true }
   | { form: 'element_visible'; locator: LocatorSpec }
   | { form: 'element_has_value'; locator: LocatorSpec; value: string }
   | { form: 'semantic' };
@@ -64,6 +65,11 @@ export interface StepResult {
   step: Step;
   status: StepStatus;
   detail?: string;
+  note?: string;
+}
+
+export interface ExecuteResult {
+  pinned?: Assertion;
 }
 
 export interface ScenarioResult {

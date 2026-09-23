@@ -2,11 +2,13 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import type { ResolvedStep, Scenario } from './types.js';
 
-const VERSION = 1;
+const VERSION = 2;
+const READABLE_VERSIONS = new Set([1, 2]);
 
 interface LockEntry {
   text: string;
   resolved: ResolvedStep;
+  confidence?: number;
 }
 
 export function stepKey(scenario: Scenario, index: number): string {
@@ -28,20 +30,23 @@ export function lockPathFor(featureUri: string): string {
 
 export class Lockfile {
   private touched = new Set<string>();
-  private dirty = false;
+  private dirty: boolean;
 
   private constructor(
     private readonly path: string,
     private steps: Record<string, LockEntry>,
-  ) {}
+    dirty = false,
+  ) {
+    this.dirty = dirty;
+  }
 
   static load(path: string): Lockfile {
     if (!existsSync(path)) return new Lockfile(path, {});
     const data = JSON.parse(readFileSync(path, 'utf8'));
-    if (data.version !== VERSION) {
+    if (!READABLE_VERSIONS.has(data.version)) {
       throw new Error(`${path}: unsupported lockfile version ${data.version} (expected ${VERSION})`);
     }
-    return new Lockfile(path, data.steps ?? {});
+    return new Lockfile(path, data.steps ?? {}, data.version !== VERSION);
   }
 
   get(key: string): ResolvedStep | undefined {
@@ -49,9 +54,18 @@ export class Lockfile {
     return this.steps[key]?.resolved;
   }
 
-  set(key: string, text: string, resolved: ResolvedStep): void {
+  getEntry(key: string): { resolved: ResolvedStep; confidence?: number } | undefined {
     this.touched.add(key);
-    this.steps[key] = { text, resolved };
+    const entry = this.steps[key];
+    if (!entry) return undefined;
+    return entry.confidence === undefined
+      ? { resolved: entry.resolved }
+      : { resolved: entry.resolved, confidence: entry.confidence };
+  }
+
+  set(key: string, text: string, resolved: ResolvedStep, confidence?: number): void {
+    this.touched.add(key);
+    this.steps[key] = { text, resolved, ...(confidence === undefined ? {} : { confidence }) };
     this.dirty = true;
   }
 
