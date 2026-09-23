@@ -14,17 +14,17 @@ Feature: Wikipedia search
   Scenario: Looking up bagels
     Given I am on https://en.wikipedia.org
     When I search for "bagel"
-    Then I should see "From Wikipedia, the free encyclopedia"
+    Then I see an article about bagels
     And the URL should contain "/wiki/Bagel"
 ```
 
 ```console
-$ jevcumber examples/
+$ jevcumber examples/ --frozen
 Feature: Wikipedia search
   Scenario: Looking up bagels
     ✓ Given I am on https://en.wikipedia.org
     ✓ When I search for "bagel"
-    ✓ Then I should see "From Wikipedia, the free encyclopedia"
+    ✓ Then I see an article about bagels
     ✓ Then the URL should contain "/wiki/Bagel"
 
 1 scenarios (1 passed) · 4 steps (4 passed)
@@ -135,8 +135,19 @@ jevcumber <paths...> [options]
 | `--config <path>` | Path to `jevcumber.config.js`/`.mjs` (default: the nearest one found walking up from the cwd). |
 | `--reporter <name>` | Reporter to use: `console` (default), `json`, or `junit`. Repeatable to run several at once. |
 | `--output <file>` | Output file for the `json`/`junit` reporters (default: `results.json`/`results.xml` under `--report-dir`). |
+| `--record-eval <dir>` | Record every Jev exchange (sent, received, outcome) under this directory, for offline reproduction. Nothing is written under `--frozen`. |
 
 Exit code is `1` if any step failed, was ambiguous, or was undefined.
+
+### Subcommands
+
+| | |
+| --- | --- |
+| `jevcumber install-browser [--with-deps]` | Downloads the Chromium build jevcumber drives, matched to the bundled Playwright. |
+| `jevcumber explain <paths...> [--tags <expr>]` | Prints, for every scenario step, what its lockfile entry resolves to — no browser, no API. `✓` for a normal step, `~` for one judged live by Jev each run, `✗` for one missing from the lockfile. Exits `1` on a missing entry, or when no scenarios are found. |
+
+Both are ordinary subcommands, so a directory literally named `explain` or `install-browser` has to be
+passed as `./explain` or `./install-browser` to avoid being read as the subcommand name.
 
 Runs are **parallel by default**, one worker per scenario up to `--workers` (which defaults to your
 CPU count under `--frozen`, or that count capped at `4` otherwise, since Jev has its own rate
@@ -178,7 +189,7 @@ done by the official `@cucumber/gherkin`.
 
 ## Writing steps Jev can resolve
 
-See the [cookbook](https://jevcumber.dev/cookbook.html) for every step phrasing verified against Jev
+See the [cookbook](https://jevcumber.dev/cookbook) for every step phrasing verified against Jev
 in this repo's own test suite, grouped by what it does.
 
 - **Put data in quotes.** Jev selects values, it never invents them:
@@ -255,6 +266,7 @@ every call that isn't replayed from the lockfile — don't commit it.
 - run: npm install -g jevcumber
 - run: jevcumber install-browser --with-deps
 - run: jevcumber features/ --frozen --base-url http://localhost:3000
+- run: jevcumber explain features/   # optional: prints what every step resolves to, for the PR log
 ```
 
 ## Limits
@@ -281,10 +293,11 @@ by `runner`. The design doc is in [`docs/superpowers/specs`](docs/superpowers/sp
 
 ### The website
 
-[jevcumber.dev](https://jevcumber.dev) is the single static page in `site/`, served by a Cloudflare Worker
+[jevcumber.dev](https://jevcumber.dev) is the static page in `site/`, plus a generated `site/cookbook.html`
+(`npm run cookbook`, from `scripts/cookbook.ts` — see below), served by a Cloudflare Worker
 (`wrangler.jsonc`, `site-worker/index.js`) that also redirects jevcumber.com and the `www.` hosts to
-jevcumber.dev and answers byte-range requests for the demo video. Deploy with `npm run deploy:site`
-(needs `npx wrangler login` first).
+jevcumber.dev and answers byte-range requests for the demo video. `npm run deploy:site` regenerates
+the cookbook and deploys both pages (needs `npx wrangler login` first).
 
 ### Tuning the questions Jev is asked
 

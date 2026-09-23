@@ -35,7 +35,7 @@
     "test": "vitest run",
     "jevcumber": "npm run build && node dist/cli.js",
     "cookbook": "tsx scripts/cookbook.ts",
-    "deploy:site": "npm run cookbook && wrangler deploy"
+    "deploy:site": "npm run cookbook && npx wrangler deploy"
   },
   "dependencies": {
     "@cucumber/gherkin": "^42.0.1",

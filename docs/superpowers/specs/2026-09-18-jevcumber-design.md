@@ -215,7 +215,18 @@ jevcumber <paths…> [--base-url <url>]
           [--frozen | --update] [--headed] [--min-confidence <n>] [--tags <expr>]
           [--report-dir <dir>] [--no-report] [--trace]
           [--workers <n>] [--config <path>] [--reporter <name>] [--output <file>]
+          [--record-eval <dir>]
+
+jevcumber install-browser [--with-deps]
+jevcumber explain <paths…> [--tags <expr>]
 ```
+`--record-eval <dir>` records every Jev exchange (what was sent, what came back, and the outcome)
+under `<dir>`, for offline reproduction; nothing is written under `--frozen`, since no Jev calls
+happen. `install-browser` downloads the Chromium build bundled with jevcumber's own Playwright
+dependency. `explain` prints, for every scenario step, what its lockfile entry resolves to — no
+browser, no API — marking each line `✓`, `~` (judged live by Jev each run), or `✗` (missing from the
+lockfile), and exits 1 on a missing entry or when no scenarios are found. See v0.2 Milestone D
+(`2026-09-22-v0.2-milestones-design.md`).
 `--report-dir` (default `jevcumber-report`) is where failure evidence (screenshot + snapshot) and,
 when `--trace` is set, per-scenario traces are written — `--report-dir` applies to traces even under
 `--no-report`. `--no-report` turns off evidence capture. `--trace` records a Playwright trace per
